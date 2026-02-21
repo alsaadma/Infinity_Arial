@@ -1,0 +1,3 @@
+﻿show_id,stage,priority_score,event_type,city,date,start_time,requested_drones,duration_min,notes
+S-001,PROSPECT,80,National Day,Riyadh,2026-03-30,20:00,1200,15,
+S-002,PROSPECT,55,Product Launch,Jeddah,2026-04-01,21:00,800,12,

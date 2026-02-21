@@ -1,0 +1,7 @@
+﻿asset_type,model,qty,unit,notes
+DRONE,Damoda-Outdoor,2000,pcs,
+POWER_STATION,,0,pcs,1 per 6 drones (per Damoda package baseline)
+CHARGING_DOCK,,0,pcs,1 per 24 drones (per Damoda package baseline)
+AP_UNIT,,0,pcs,1 per 800 drones (per Damoda package baseline)
+RTK_SET,,0,sets,per show primary+backup
+CONTROL_STACK,,0,sets,primary+backup per simultaneous show

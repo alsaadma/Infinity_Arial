@@ -1,0 +1,4 @@
+﻿city,month,avg_temp_c,avg_humidity_pct,wind_risk_flag,sandstorm_flag,rain_flag,notes
+Dammam,1,,,,,, 
+Riyadh,1,,,,,,
+Jeddah,1,,,,,,
