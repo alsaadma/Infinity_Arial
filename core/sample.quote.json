@@ -1,0 +1,26 @@
+{
+  "quote_id": "Q-20260221-001",
+  "version": 1,
+  "event": {
+    "client_name": "Client",
+    "event_name": "Event",
+    "city_type": "URBAN",
+    "show_date": "2026-03-15"
+  },
+  "requirements": {
+    "required_drones": 1000,
+    "duration_min": 18,
+    "prep_days": 2,
+    "permits_days_remaining": 12,
+    "risk_level": "HIGH"
+  },
+  "cost_inputs_sar": {
+    "variable_base": 60000,
+    "transport": 25000,
+    "crew": 35000,
+    "site_ops": 10000,
+    "other": 0
+  },
+  "manual_override": { "enabled": false, "notes": "" },
+  "proposed_price_ex_vat_sar": 350000
+}

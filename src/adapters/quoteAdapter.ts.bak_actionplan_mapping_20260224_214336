@@ -1,0 +1,174 @@
+﻿import { computeQuote, type ShowQuoteInput, type QuoteResult } from "../core/quoteEngine";
+import { fleetBaseline } from "../core/fleetBaseline";
+
+export type ParseOk<T> = { ok: true; value: T };
+export type ParseErr = { ok: false; error: string };
+export type ParseResult<T> = ParseOk<T> | ParseErr;
+
+export function safeParseJson(raw: string): ParseResult<any> {
+  try {
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== "object") return { ok: false, error: "JSON must be an object." };
+    return { ok: true, value: v };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Invalid JSON." };
+  }
+}
+
+/**
+ * Normalizes unknown input into strict ShowQuoteInput.
+ * This is the HARD boundary: UI can be messy; engine input must be clean.
+ */
+export function normalizeShowInput(v: any): ShowQuoteInput {
+  const input = v ?? {};
+  const req = input.requirements ?? {};
+  const cost = input.cost_inputs_sar ?? {};
+  const manual = input.manual_override ?? {};
+  const event = input.event ?? {};
+
+  return {
+    quote_id: input.quote_id ?? "Q-LOCAL-000",
+    version: typeof input.version === "number" ? input.version : 1,
+
+    event: {
+      client_name: event.client_name ?? "Client",
+      event_name: event.event_name ?? "Drone Light Show",
+      city_type: event.city_type ?? "URBAN",
+      show_date: event.show_date ?? new Date().toISOString().slice(0, 10),
+    },
+
+    requirements: {
+      required_drones: typeof req.required_drones === "number" ? req.required_drones : 1000,
+      duration_min: typeof req.duration_min === "number" ? req.duration_min : 12,
+      prep_days: typeof req.prep_days === "number" ? req.prep_days : undefined,
+      permits_days_remaining: typeof req.permits_days_remaining === "number" ? req.permits_days_remaining : 0,
+      risk_level: req.risk_level ?? "MED",
+    },
+
+    cost_inputs_sar: {
+      variable_base: Number(cost.variable_base ?? 0),
+      transport: Number(cost.transport ?? 0),
+      crew: Number(cost.crew ?? 0),
+      site_ops: Number(cost.site_ops ?? 0),
+      other: Number(cost.other ?? 0),
+    },
+
+    manual_override: {
+      enabled: !!manual.enabled,
+      notes: manual.notes ?? "",
+    },
+
+    proposed_price_ex_vat_sar:
+      typeof input.proposed_price_ex_vat_sar === "number" ? input.proposed_price_ex_vat_sar : undefined,
+  };
+}
+
+export function computeFromRawJson(raw: string): ParseResult<QuoteResult> {
+  const parsed = safeParseJson(raw);
+  if (!parsed.ok) return parsed;
+
+  try {
+    const normalized = normalizeShowInput(parsed.value);
+    const out = computeQuote(fleetBaseline, normalized);
+    return { ok: true, value: out };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? String(e) };
+  }
+}
+
+//
+// Phase 2 export (UI -> Adapter -> Engine)
+// computeNormalizedQuote: returns a normalized shape for dashboard UI.
+// NOTE: This is a thin wrapper around the existing adapter result.
+// You can refine normalization here without letting UI touch engine.
+//
+//
+// Phase 2 export (UI -> Adapter -> Engine)
+// computeNormalizedQuote: normalized shape for dashboard UI.
+// Uses computeFromRawJson() as the adapter gateway.
+//
+export function computeNormalizedQuote(
+  input: any,
+  opts?: { target_margin_pct?: number; proposed_price_sar?: number }
+) {
+  const rawText =
+    typeof input === "string"
+      ? input
+      : JSON.stringify(input ?? {}, null, 0);
+
+  const parsed = computeFromRawJson(rawText);
+
+  if (!parsed || (parsed as any).ok !== true) {
+    const err = (parsed && (parsed as any).error) ? String((parsed as any).error) : "Adapter compute failed.";
+    throw new Error(err);
+  }
+
+  const quote: any = (parsed as any).value;
+
+  const readiness = quote?.readiness ?? null;
+  const msq_sar = quote?.msq_sar ?? null;
+
+  const target =
+    typeof opts?.target_margin_pct === "number" && Number.isFinite(opts.target_margin_pct)
+      ? opts!.target_margin_pct
+      : 0.30;
+
+  let proposed_price_sar: number | null = null;
+
+  if (typeof opts?.proposed_price_sar === "number" && Number.isFinite(opts.proposed_price_sar)) {
+    proposed_price_sar = opts.proposed_price_sar;
+  } else if (typeof msq_sar === "number" && Number.isFinite(msq_sar)) {
+    const denom = Math.max(0.01, 1 - target);
+    proposed_price_sar = msq_sar / denom;
+  }
+
+  const margin_gap_sar =
+    typeof proposed_price_sar === "number" && typeof msq_sar === "number"
+      ? proposed_price_sar - msq_sar
+      : null;
+
+  const gaps_ranked =
+    Array.isArray(quote?.gaps_ranked) ? quote.gaps_ranked :
+    Array.isArray(quote?.gaps) ? quote.gaps :
+    [];
+
+  const action_plan = gaps_ranked.map((g: any, idx: number) => {
+    const title = String(g?.title ?? g?.name ?? g?.gap ?? ("Gap #" + (idx + 1)));
+    const sev0 = (typeof g?.severity === "number") ? g.severity : (typeof g?.sev === "number" ? g.sev : 3);
+    const severity = Math.max(1, Math.min(5, Math.round(sev0)));
+
+    const blocker = (typeof g?.blocker === "boolean") ? g.blocker : (severity >= 5);
+    const priority = blocker && severity >= 5 ? "P0" : severity >= 4 ? "P1" : severity === 3 ? "P2" : "P3";
+    const due_days = priority === "P0" ? 7 : priority === "P1" ? 14 : priority === "P2" ? 30 : 60;
+
+    const owner =
+      String(g?.owner ?? g?.owner_hint ?? "").trim() ||
+      (title.toLowerCase().includes("permit") || title.toLowerCase().includes("gaca") ? "Compliance" : "Ops");
+
+    const evidence_needed =
+      String(g?.evidence_needed ?? g?.evidence ?? g?.missing ?? "Provide supporting evidence").trim();
+
+    return {
+      id: String(g?.id ?? g?.code ?? ("GAP-" + String(idx + 1).padStart(3, "0"))),
+      title,
+      severity,
+      blocker,
+      owner,
+      due_days,
+      priority,
+      status: "Open",
+      evidence_needed
+    };
+  });
+
+  return {
+    ...quote,
+    readiness,
+    msq_sar,
+    proposed_price_sar,
+    margin_gap_sar,
+    gaps_ranked,
+    action_plan
+  };
+}
+

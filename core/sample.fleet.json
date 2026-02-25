@@ -1,0 +1,13 @@
+{
+  "fleet_size": 1000,
+  "capex_sar": 3991657,
+  "useful_life_years": 3,
+  "expected_shows_per_year": 45,
+  "residual_value_pct": 0.15,
+  "holds": { "maintenance": 30, "reserved": 0, "damaged": 10 },
+  "spare_ratio_target_pct": 0.05,
+  "charging": { "capacity_drones_per_day": 600, "default_prep_days": 2 },
+  "ground": { "rtk_available": 2, "ap_available": 3, "ap_per_drones": 800, "rtk_min": 1 },
+  "compliance": { "permits_min_lead_days": 21 },
+  "risk_buffers_pct": { "LOW": 0.05, "MED": 0.10, "HIGH": 0.15 }
+}

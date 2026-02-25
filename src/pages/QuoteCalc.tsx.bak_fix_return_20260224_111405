@@ -1,0 +1,395 @@
+﻿import React, { useMemo, useState } from "react";
+import { computeQuote, type ShowQuoteInput } from "../core/quoteEngine";
+import { fleetBaseline } from "../core/fleetBaseline";
+
+function safeParse(s: string): { ok: true; value: any } | { ok: false; error: string } {
+  try {
+    const v = JSON.parse(s);
+    if (!v || typeof v !== "object") return { ok: false, error: "JSON must be an object." };
+    return { ok: true, value: v };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Invalid JSON" };
+  }
+}
+
+function normalizeShowInput(v: any): ShowQuoteInput {
+  const input = v ?? {};
+  const req = input.requirements ?? {};
+  const cost = input.cost_inputs_sar ?? {};
+  const manual = input.manual_override ?? {};
+  const event = input.event ?? {};
+
+  return {
+    quote_id: input.quote_id ?? "Q-LOCAL-000",
+    version: typeof input.version === "number" ? input.version : 1,
+
+    event: {
+      client_name: event.client_name ?? "Client",
+      event_name: event.event_name ?? "Drone Light Show",
+      city_type: event.city_type ?? "URBAN",
+      show_date: event.show_date ?? new Date().toISOString().slice(0, 10),
+    },
+
+    requirements: {
+      required_drones: typeof req.required_drones === "number" ? req.required_drones : 1000,
+      duration_min: typeof req.duration_min === "number" ? req.duration_min : 12,
+      prep_days: req.prep_days ?? undefined,
+      permits_days_remaining: typeof req.permits_days_remaining === "number" ? req.permits_days_remaining : 0,
+      risk_level: req.risk_level ?? "MED",
+    },
+
+    cost_inputs_sar: {
+      variable_base: cost.variable_base ?? 0,
+      transport: cost.transport ?? 0,
+      crew: cost.crew ?? 0,
+      site_ops: cost.site_ops ?? 0,
+      other: cost.other ?? 0,
+    },
+
+    manual_override: {
+      enabled: !!manual.enabled,
+      notes: manual.notes ?? "",
+    },
+
+    proposed_price_ex_vat_sar:
+      typeof input.proposed_price_ex_vat_sar === "number" ? input.proposed_price_ex_vat_sar : undefined,
+  };
+}
+
+function money(n: any) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return String(n ?? "");
+  return x.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function ownerForGap(category: any) {
+  switch (category) {
+    case "PERMITS_LEAD_TIME": return "Compliance / Permits";
+    case "DRONES_AVAILABILITY": return "Ops / Fleet";
+    case "SPARE_RATIO": return "Ops / Fleet";
+    case "CHARGING_CAPACITY": return "Ops / Logistics";
+    case "GROUND_RTK": return "Tech / Field";
+    case "GROUND_AP": return "Tech / Field";
+    default: return "Ops";
+  }
+}
+
+function priorityForGap(g: any) {
+  const sev = Number(g?.severity ?? 0);
+  if (g?.blocker && sev >= 60) return "P0";
+  if (g?.blocker) return "P1";
+  if (sev >= 40) return "P2";
+  return "P3";
+}
+
+function dueDaysForGap(g: any) {
+  const ltr = Number(g?.lead_time_risk ?? 3); // 1..5
+  const base = (6 - Math.max(1, Math.min(5, ltr))) * 3; // 15..3
+  const adj = g?.blocker ? -2 : 0;
+  return Math.max(1, base + adj);
+}
+
+function toTSV(rows: any[]) {
+  const header = ["#", "Gap", "Owner", "Priority", "DueDays", "Fix", "Blocker", "Value"];
+  const lines = [header.join("\t")];
+  rows.forEach((r, i) => {
+    lines.push([
+      String(i + 1),
+      String(r.gap ?? ""),
+      String(r.owner ?? ""),
+      String(r.priority ?? ""),
+      String(r.due_days ?? ""),
+      String(r.fix ?? ""),
+      String(r.blocker ?? ""),
+      String(r.value ?? ""),
+    ].join("\t"));
+  });
+  return lines.join("\n");
+}
+
+export default function QuoteCalc() {
+  const defaultInput = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          quote_id: "Q-LOCAL-000",
+          version: 1,
+          event: { client_name: "Client", event_name: "Drone Light Show", city_type: "URBAN", show_date: "2026-02-24" },
+          requirements: { required_drones: 1000, duration_min: 12, prep_days: 4, permits_days_remaining: 10, risk_level: "MED" },
+          cost_inputs_sar: { variable_base: 120000, transport: 15000, crew: 25000, site_ops: 10000, other: 5000 },
+          manual_override: { enabled: false, notes: "" },
+          proposed_price_ex_vat_sar: 250000
+        },
+        null,
+        2
+      ),
+    []
+  );
+
+  const [inputText, setInputText] = useState(() => localStorage.getItem("quote_calc_input_json") ?? defaultInput);
+  const [error, setError] = useState<string>("");
+    
+  const [result, setResult] = useState<any>(() => {
+    const s = localStorage.getItem("quote_calc_last_result");
+    if (!s) return null;
+    const p = safeParse(s);
+    return p.ok ? p.value : null;
+  });
+
+  function onCompute() {
+    setError("");
+    const parsed = safeParse(inputText);
+    if (!parsed.ok) return setError(parsed.error);
+
+    try {
+      const normalized = normalizeShowInput(parsed.value);
+      const out = computeQuote(fleetBaseline, normalized);
+
+      setResult(out);
+      localStorage.setItem("quote_calc_input_json", inputText);
+      localStorage.setItem("quote_calc_last_result", JSON.stringify(out));
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    }
+  }
+
+  const gaps = Array.isArray(result?.gaps_ranked) ? result.gaps_ranked : [];
+  const top = Array.isArray(result?.top_weaknesses) ? result.top_weaknesses : gaps.slice(0, 5);
+
+  
+
+  const actionPlan = gaps.map((g: any) => ({
+    gap: g?.category ?? g?.id ?? "GAP",
+    owner: ownerForGap(g?.category),
+    priority: priorityForGap(g),
+    due_days: dueDaysForGap(g),
+    fix: String(g?.default_fix ?? ""),
+    blocker: !!g?.blocker,
+    value: g?.value ?? null,
+    severity: g?.severity ?? null,
+    trigger: g?.trigger ?? null,
+  }));return (
+    <div style={{ padding: 18, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui" }}>
+      <h1 style={{ margin: 0 }}>Quote Calc</h1>
+      <p style={{ opacity: 0.8, marginTop: 6 }}>
+        This UI expects <b>ShowQuoteInput</b> JSON (not fleet/pricing/ops). FleetBaseline is loaded from <code>src/core/fleetBaseline.ts</code>.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
+        <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Input JSON</h2>
+          <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <div style={{ fontWeight: 650, marginBottom: 8 }}>Scenario Controls</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+
+              <label style={{ fontSize: 12 }}>
+                Required Drones
+                <input
+                  type="number"
+                  value={(() => { const p=safeParse(inputText); const v=p.ok?readPath(p.value,"requirements.required_drones"):1000; return Number(v)||1000; })()}
+                  onChange={(e) => patchInputJson(inputText, setInputText, (o) => { o.requirements=o.requirements??{}; o.requirements.required_drones=Number(e.target.value||0); })}
+                  style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 8, border: "1px solid rgba(0,0,0,0.2)" }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12 }}>
+                Risk Level
+                <select
+                  value={(() => { const p=safeParse(inputText); const v=p.ok?readPath(p.value,"requirements.risk_level"):"MED"; return (v||"MED"); })()}
+                  onChange={(e) => patchInputJson(inputText, setInputText, (o) => { o.requirements=o.requirements??{}; o.requirements.risk_level=e.target.value; })}
+                  style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 8, border: "1px solid rgba(0,0,0,0.2)" }}
+                >
+                  <option value="LOW">LOW</option>
+                  <option value="MED">MED</option>
+                  <option value="HIGH">HIGH</option>
+                </select>
+              </label>
+
+              <label style={{ fontSize: 12 }}>
+                Permits Days Remaining
+                <input
+                  type="number"
+                  value={(() => { const p=safeParse(inputText); const v=p.ok?readPath(p.value,"requirements.permits_days_remaining"):0; return Number(v)||0; })()}
+                  onChange={(e) => patchInputJson(inputText, setInputText, (o) => { o.requirements=o.requirements??{}; o.requirements.permits_days_remaining=Number(e.target.value||0); })}
+                  style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 8, border: "1px solid rgba(0,0,0,0.2)" }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12 }}>
+                Proposed Price (ex VAT) SAR
+                <input
+                  type="number"
+                  value={(() => { const p=safeParse(inputText); const v=p.ok?readPath(p.value,"proposed_price_ex_vat_sar"):250000; return Number(v)||250000; })()}
+                  onChange={(e) => patchInputJson(inputText, setInputText, (o) => { o.proposed_price_ex_vat_sar=Number(e.target.value||0); })}
+                  style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 8, border: "1px solid rgba(0,0,0,0.2)" }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12 }}>
+                Prep Days
+                <input
+                  type="number"
+                  value={(() => { const p=safeParse(inputText); const v=p.ok?readPath(p.value,"requirements.prep_days"):0; return Number(v)||0; })()}
+                  onChange={(e) => patchInputJson(inputText, setInputText, (o) => { o.requirements=o.requirements??{}; o.requirements.prep_days=Number(e.target.value||0); })}
+                  style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 8, border: "1px solid rgba(0,0,0,0.2)" }}
+                />
+              </label>
+
+              <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
+                <button
+                  onClick={() => patchInputJson(inputText, setInputText, (o) => { o.manual_override=o.manual_override??{}; o.manual_override.enabled=false; o.manual_override.notes=""; })}
+                  style={{ padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}
+                >
+                  Clear Manual Override
+                </button>
+              </div>
+
+            </div>
+          </div>
+          <textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            spellCheck={false}
+            style={{ width: "100%", minHeight: 360, fontFamily: "ui-monospace, monospace", fontSize: 12, borderRadius: 8, padding: 10 }}
+          />
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button onClick={onCompute} style={{ padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+              Compute Quote
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem("quote_calc_input_json");
+                localStorage.removeItem("quote_calc_last_result");
+                setInputText(defaultInput);
+                setResult(null);
+                setError("");
+              }}
+              style={{ padding: "10px 12px", borderRadius: 10, cursor: "pointer", opacity: 0.9 }}
+            >
+              Reset
+            </button>
+          </div>
+
+          {error ? (
+            <div style={{ marginTop: 10, color: "crimson", whiteSpace: "pre-wrap" }}>
+              <b>Error:</b> {error}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+            <h2 style={{ marginTop: 0, fontSize: 16 }}>Summary</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ padding: 10, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10 }}>
+                <div style={{ opacity: 0.7, fontSize: 12 }}>MSQ (SAR)</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{result?.msq_sar == null ? "—" : money(result.msq_sar)}</div>
+              </div>
+              <div style={{ padding: 10, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10 }}>
+                <div style={{ opacity: 0.7, fontSize: 12 }}>Readiness</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{result?.readiness ?? "—"}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 10, opacity: 0.8, fontSize: 12 }}>
+              Gaps found: <b>{gaps.length}</b>
+            </div>
+          </div>
+
+          <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+            <h2 style={{ marginTop: 0, fontSize: 16 }}>Top Weaknesses</h2>
+            {top.length ? (
+              <ol style={{ margin: 0, paddingLeft: 18 }}>
+                {top.map((g: any, i: number) => (
+                  <li key={i} style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 650 }}>{g?.category ?? g?.id ?? "Gap"}</div>
+                    <div style={{ opacity: 0.8, fontSize: 12 }}>
+                      severity: <b>{g?.severity ?? "—"}</b> · value: <b>{g?.value ?? "—"}</b>
+                    </div>
+                    {g?.default_fix ? <div style={{ opacity: 0.8, fontSize: 12 }}>{String(g.default_fix)}</div> : null}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+
+                    <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+              <h2 style={{ marginTop: 0, fontSize: 16 }}>Action Plan (Owner-ready)</h2>
+              <button
+                onClick={() => {
+                  const tsv = toTSV(actionPlan);
+                  navigator.clipboard?.writeText(tsv);
+                }}
+                style={{ padding: "8px 10px", borderRadius: 10, cursor: "pointer", opacity: 0.9 }}
+                disabled={!actionPlan.length}
+              >
+                Copy (TSV)
+              </button>
+            </div>
+
+            {actionPlan.length ? (
+              <div style={{ overflow: "auto", maxHeight: 260 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>#</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>Gap</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>Owner</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>Priority</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>Due (days)</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid rgba(0,0,0,0.2)", padding: "6px 6px" }}>Recommended Fix</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actionPlan.map((a: any, idx: number) => (
+                      <tr key={idx}>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px", opacity: 0.8 }}>{idx + 1}</td>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px" }}>
+                          <div style={{ fontWeight: 650 }}>{a.gap}</div>
+                          <div style={{ opacity: 0.75, fontSize: 12 }}>
+                            {a.blocker ? "BLOCKER" : "non-blocker"} · value: <b>{String(a.value ?? "—")}</b>
+                          </div>
+                        </td>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px" }}>{a.owner}</td>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px" }}><b>{a.priority}</b></td>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px" }}>{a.due_days}</td>
+                        <td style={{ borderBottom: "1px solid rgba(0,0,0,0.12)", padding: "6px 6px" }}>{a.fix}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+
+<div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+            <h2 style={{ marginTop: 0, fontSize: 16 }}>All Gaps (ranked)</h2>
+            {gaps.length ? (
+              <pre style={{ margin: 0, overflow: "auto", maxHeight: 280, fontSize: 12 }}>{JSON.stringify(gaps, null, 2)}</pre>
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {result ? (
+        <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Raw Output</h2>
+          <pre style={{ margin: 0, overflow: "auto", maxHeight: 360, fontSize: 12 }}>{JSON.stringify(result, null, 2)}</pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+
+
+
+
+

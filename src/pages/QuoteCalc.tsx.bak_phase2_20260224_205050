@@ -1,0 +1,132 @@
+﻿import React, { useMemo, useState } from "react";
+import { computeFromRawJson, safeParseJson } from "../adapters/quoteAdapter";
+
+function money(n: any) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return String(n ?? "");
+  return x.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+export default function QuoteCalc() {
+  const defaultInput = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          quote_id: "Q-LOCAL-000",
+          version: 1,
+          event: { client_name: "Client", event_name: "Drone Light Show", city_type: "URBAN", show_date: "2026-02-24" },
+          requirements: { required_drones: 1000, duration_min: 12, prep_days: 4, permits_days_remaining: 10, risk_level: "MED" },
+          cost_inputs_sar: { variable_base: 120000, transport: 15000, crew: 25000, site_ops: 10000, other: 5000 },
+          manual_override: { enabled: false, notes: "" },
+          proposed_price_ex_vat_sar: 250000
+        },
+        null,
+        2
+      ),
+    []
+  );
+
+  const [inputText, setInputText] = useState(() => localStorage.getItem("quote_calc_input_json") ?? defaultInput);
+  const [error, setError] = useState<string>("");
+  const [result, setResult] = useState<any>(() => {
+    const s = localStorage.getItem("quote_calc_last_result");
+    if (!s) return null;
+    const p = safeParseJson(s);
+    return p.ok ? p.value : null;
+  });
+
+  function onCompute() {
+    setError("");
+    const out = computeFromRawJson(inputText);
+    if (!out.ok) {
+      setError(out.error);
+      return;
+    }
+    setResult(out.value);
+    localStorage.setItem("quote_calc_input_json", inputText);
+    localStorage.setItem("quote_calc_last_result", JSON.stringify(out.value));
+  }
+
+  const gaps = Array.isArray(result?.gaps_ranked) ? result.gaps_ranked : [];
+
+  return (
+    <div style={{ padding: 18, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui" }}>
+      <h1 style={{ margin: 0 }}>Quote Calc</h1>
+      <p style={{ opacity: 0.8, marginTop: 6 }}>
+        UI → <b>adapter</b> → engine. Input is <b>ShowQuoteInput JSON</b>.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
+        <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Input JSON</h2>
+          <textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            spellCheck={false}
+            style={{ width: "100%", height: 420, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, padding: 10 }}
+          />
+          <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
+            <button onClick={onCompute} style={{ padding: "8px 12px", borderRadius: 8, cursor: "pointer" }}>
+              Compute
+            </button>
+            {error ? <span style={{ color: "crimson", fontWeight: 600 }}>{error}</span> : null}
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, padding: 12 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Result</h2>
+
+          {!result ? (
+            <p style={{ opacity: 0.75 }}>No result yet. Click Compute.</p>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: 10 }}>
+                  <div style={{ opacity: 0.8 }}>Readiness</div>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{String(result.readiness ?? "-")}</div>
+                </div>
+                <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: 10 }}>
+                  <div style={{ opacity: 0.8 }}>MSQ (SAR)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{money(result.msq_sar)}</div>
+                </div>
+              </div>
+
+              <h3 style={{ marginTop: 14, marginBottom: 8 }}>All gaps (ranked)</h3>
+              <div style={{ maxHeight: 320, overflow: "auto", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", position: "sticky", top: 0, background: "white" }}>
+                      <th style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.10)" }}>#</th>
+                      <th style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.10)" }}>Category</th>
+                      <th style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.10)" }}>Severity</th>
+                      <th style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.10)" }}>Blocker</th>
+                      <th style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.10)" }}>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gaps.map((g: any, idx: number) => (
+                      <tr key={idx}>
+                        <td style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{idx + 1}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{String(g?.category ?? g?.id ?? "-")}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{String(g?.severity ?? "-")}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{g?.blocker ? "Yes" : "No"}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{String(g?.value ?? "-")}</td>
+                      </tr>
+                    ))}
+                    {!gaps.length ? (
+                      <tr>
+                        <td colSpan={5} style={{ padding: 10, opacity: 0.7 }}>
+                          No gaps returned.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

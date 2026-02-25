@@ -4,7 +4,7 @@ import Dashboard from "./ui/pages/Dashboard";
 import QuoteBuilder from "./ui/pages/QuoteBuilder";
 import OpsPlan from "./ui/pages/OpsPlan";
 import Library from "./ui/pages/Library";
-import QuoteCalc from "./pages/QuoteCalc";
+import { QuoteCalc } from "./pages/QuoteCalc";
 
 export default function App() {
   return (
