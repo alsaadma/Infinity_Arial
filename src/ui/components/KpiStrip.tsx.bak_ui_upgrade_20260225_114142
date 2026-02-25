@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Box, Paper, Typography, Divider } from "@mui/material";
 
 type KpiItem = {
@@ -35,7 +35,7 @@ export default function KpiStrip(props: {
   const { readiness, msqSar, proposedPriceSar, marginGapSar, formatSar } = props;
 
   const items: KpiItem[] = [
-    { label: "Readiness", value: readiness ?? "-", hint: "Operational readiness state" },
+    { label: "Readiness", value: readiness ?? "—", hint: "Operational readiness state" },
     { label: "MSQ (SAR)", value: formatSar(msqSar), hint: "Minimum sustainable quote" },
     { label: "Proposed Price (SAR)", value: formatSar(proposedPriceSar), hint: "Your commercial offer" },
     { label: "Margin Gap (SAR)", value: formatSar(marginGapSar), hint: "Price − MSQ" },

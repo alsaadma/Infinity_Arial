@@ -24,7 +24,7 @@ export default function FiltersBar(props: {
 
       <TextField
         size="small"
-        label="Min severity (1-5)"
+        label="Min severity (1–5)"
         type="number"
         inputProps={{ min: 1, max: 5, step: 1 }}
         value={minSeverity}

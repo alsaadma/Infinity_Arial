@@ -515,7 +515,24 @@ import ActionPlanTable, { type ActionPlanRow } from "../ui/components/ActionPlan
 
 
 import { computeNormalizedQuote } from "../adapters/quoteAdapter";
-import SnapshotBar from "../ui/components/SnapshotBar";
+import {  as SnapshotBar } from "../ui/components/SnapshotBar";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 type ParseOk = { ok: true; value: any };
 
 
@@ -642,7 +659,7 @@ function formatSar(n: number | undefined | null) {
 
 
 
-  if (typeof n !== "number" || !Number.isFinite(n)) return "-";
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
 
 
 
@@ -2781,7 +2798,7 @@ return filtered;
 
 
 
-          1) Compute Baseline {"\u2192"} 2) Simulate resolved gaps {"\u2192"} 3) Review the delta below.
+          1) Compute Baseline → 2) Simulate resolved gaps → 3) Review the delta below.
 
 
 
@@ -2970,7 +2987,7 @@ return filtered;
 
 
 
-                {(baselineResult?.readiness ?? "-")} {"\u2192"} {(simulatedActionRows.some(r => r.blocker) ? "NOT_READY" : "READY")}
+                {(baselineResult?.readiness ?? "—")} → {(simulatedActionRows.some(r => r.blocker) ? "NOT_READY" : "READY")}
 
 
 
@@ -3033,7 +3050,7 @@ return filtered;
 
 
 
-                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.filter((r:any)=>r.blocker).length : "-")}
+                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.filter((r:any)=>r.blocker).length : "—")}
 
 
 
@@ -3042,7 +3059,7 @@ return filtered;
 
 
 
-                {" -> "}
+                {" → "}
 
 
 
@@ -3114,7 +3131,7 @@ return filtered;
 
 
 
-                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.length : "-")}
+                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.length : "—")}
 
 
 
@@ -3123,7 +3140,7 @@ return filtered;
 
 
 
-                {" -> "}
+                {" → "}
 
 
 
@@ -3501,7 +3518,7 @@ return filtered;
 
 
 
-            label="Target margin (0-0.9)"
+            label="Target margin (0–0.9)"
 
 
 
@@ -3978,7 +3995,7 @@ return filtered;
 
 
 
-              <MenuItem value="SCORE_DESC">Score (high {"\u2192"} low)</MenuItem>
+              <MenuItem value="SCORE_DESC">Score (high → low)</MenuItem>
 
 
 
@@ -3987,7 +4004,7 @@ return filtered;
 
 
 
-              <MenuItem value="TITLE_ASC">Title (A {"\u2192"} Z)</MenuItem>
+              <MenuItem value="TITLE_ASC">Title (A → Z)</MenuItem>
 
 
 
@@ -4051,12 +4068,6 @@ return filtered;
 
 
 }
-
-
-
-
-
-
 
 
 

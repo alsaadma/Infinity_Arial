@@ -1,0 +1,1 @@
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\run-encoded.ps1 -File .\patch.ps1

@@ -11,33 +11,14 @@ export type ActionPlanRow = {
   status: "Open" | "In Progress" | "Done";
   evidence_needed: string;
 };
-type RiskTone = "HIGH" | "MED" | "LOW";
-
-function riskTone(r: ActionPlanRow): RiskTone {
-  // Dominance logic: blocker + priority drive tone; severity refines.
-  if (r.blocker) return "HIGH";
-  if (r.priority === "P0") return "HIGH";
-  if (r.priority === "P1") return "MED";
-  if (r.severity >= 4) return "MED";
-  return "LOW";
-}
-
 
 function sevChip(sev: number) {
   const label = "S" + sev;
   return <Chip size="small" label={label} variant="outlined" />;
 }
 
-function prioChip(p: ActionPlanRow["priority"]) {
-  const tone: RiskTone = p === "P0" ? "HIGH" : p === "P1" ? "MED" : "LOW";
-  const sx =
-    tone === "HIGH"
-      ? { bgcolor: "rgba(220, 38, 38, 0.12)", borderColor: "rgba(220, 38, 38, 0.35)", fontWeight: 800 }
-      : tone === "MED"
-        ? { bgcolor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.35)", fontWeight: 800 }
-        : { bgcolor: "rgba(16, 185, 129, 0.10)", borderColor: "rgba(16, 185, 129, 0.25)", fontWeight: 800 };
-
-  return <Chip size="small" label={p} variant="outlined" sx={sx} />;
+function prioChip(p: string) {
+  return <Chip size="small" label={p} variant="outlined" />;
 }
 
 export default function ActionPlanTable(props: { rows: ActionPlanRow[] }) {
@@ -73,35 +54,10 @@ export default function ActionPlanTable(props: { rows: ActionPlanRow[] }) {
               </TableCell>
             </TableRow>
           ) : rows.map(r => (
-            <TableRow
-              key={r.id}
-              hover
-              sx={{
-                position: "relative",
-                ...(riskTone(r) === "HIGH"
-                  ? { bgcolor: "rgba(220, 38, 38, 0.045)" }
-                  : riskTone(r) === "MED"
-                    ? { bgcolor: "rgba(245, 158, 11, 0.045)" }
-                    : {}),
-                "&::before": {
-                  content: '""',
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 4,
-                  background:
-                    riskTone(r) === "HIGH"
-                      ? "rgba(220, 38, 38, 0.55)"
-                      : riskTone(r) === "MED"
-                        ? "rgba(245, 158, 11, 0.55)"
-                        : "transparent",
-                },
-              }}
-            >
+            <TableRow key={r.id} hover>
               <TableCell>{prioChip(r.priority)}</TableCell>
               <TableCell>{sevChip(r.severity)}</TableCell>
-              <TableCell>{r.blocker ? <Chip size="small" label="Yes" sx={{ fontWeight: 800 }} /> : <Chip size="small" label="No" variant="outlined" sx={{ opacity: 0.8 }} />}</TableCell>
+              <TableCell>{r.blocker ? <Chip size="small" label="Yes" /> : <Chip size="small" label="No" variant="outlined" />}</TableCell>
               <TableCell>{r.title}</TableCell>
               <TableCell>{r.owner}</TableCell>
               <TableCell>{r.due_days}</TableCell>
@@ -114,7 +70,4 @@ export default function ActionPlanTable(props: { rows: ActionPlanRow[] }) {
     </Paper>
   );
 }
-
-
-
 

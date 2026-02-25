@@ -1,3 +1,5 @@
+import React from "react";
+
 export type SnapshotBarProps = {
   // Keep permissive during architecture phase; QuoteCalc can pass anything without TS break.
   [key: string]: any;
@@ -9,4 +11,3 @@ export function SnapshotBar(_props: SnapshotBarProps) {
 }
 
 export default SnapshotBar;
-
