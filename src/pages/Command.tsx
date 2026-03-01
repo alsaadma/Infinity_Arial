@@ -4,37 +4,7 @@ import React from "react";
 import { useEngineSnapshot } from "../state/engineSnapshot";
 
 function clamp(n: number, min: number, max: number) {
-  // --- Owner override (UI-only, persisted) ---
-  const __dcOwnerKey = (id: string) => `drones_calc.command.ownerOverride.${id}`;
-  const __dcGetOwnerOverride = (id: string): string | null => {
-    try {
-      const v = localStorage.getItem(__dcOwnerKey(id));
-      return (v && v.trim().length) ? v : null;
-    } catch {
-      return null;
-    }
-  };
-  const __dcSetOwnerOverride = (id: string, owner: string | null) => {
-    try {
-      const key = __dcOwnerKey(id);
-      if (!owner || !owner.trim().length) localStorage.removeItem(key);
-      else localStorage.setItem(key, owner.trim());
-    } catch {
-      // ignore
-    }
-  };
-  const __dcPromptOwnerOverride = (id: string) => {
-    const current = __dcGetOwnerOverride(id) ?? "AUTO";
-    const next = window.prompt("Owner override (blank = AUTO):", current === "AUTO" ? "" : current);
-    if (next === null) return;
-    const trimmed = (next ?? "").trim();
-    __dcSetOwnerOverride(id, trimmed.length ? trimmed : null);
-    try { (window as any).__DC_CMD_OWNER_BUMP__ = ((window as any).__DC_CMD_OWNER_BUMP__ ?? 0) + 1; } catch {}
-  };
-
-  void __dcPromptOwnerOverride;
-
-  return Math.max(min, Math.min(max, n));
+return Math.max(min, Math.min(max, n));
 }
 
 function computeReliabilityIndex(readiness: string | undefined, gapsCount: number) {
@@ -90,6 +60,34 @@ export default function Command() {
     try { localStorage.setItem(__dcStatusKey(gapId), s); } catch {}
     setApStatusTick((x) => x + 1);
   };
+
+  // ---- Owner override (UI-only; stored in localStorage) ----
+ const __dcOwnerKey2 = (gapId: string) => "dc:gapOwner:" + gapId;
+ const __dcReadOwner = (gapId: string): string | null => {
+    try {
+      const v = String(localStorage.getItem(__dcOwnerKey2(gapId)) ?? "").trim();
+      return v.length ? v : null;
+    } catch {
+      return null;
+    }
+  };
+ const __dcSetOwner = (gapId: string, owner: string | null) => {
+    try {
+      const key = __dcOwnerKey2(gapId);
+      if (!owner || !owner.trim().length) localStorage.removeItem(key);
+      else localStorage.setItem(key, owner.trim());
+    } catch {}
+    // refresh UI using existing tick pattern
+    setApStatusTick((x) => x + 1);
+  };
+ const __dcPromptOwner = (gapId: string) => {
+    const current = __dcReadOwner(gapId) ?? "AUTO";
+    const next = window.prompt("Owner override (blank = AUTO):", current === "AUTO" ? "" : current);
+    if (next === null) return;
+    const trimmed = String(next ?? "").trim();
+    __dcSetOwner(gapId, trimmed.length ? trimmed : null);
+  };
+
   // ---------------------------------------------------
 
   // ---- Action Plan grouping (UI-only; dominance heuristic) ----
@@ -299,6 +297,7 @@ export default function Command() {
     : { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.22)" };
 
 return (
+                              <>
                               <button
                                 type="button"
                                 onClick={() => __dcSetStatus(gapId, __dcNextStatus(st))}
@@ -316,6 +315,26 @@ background: stylePack.bg,
                               >
                                 {st}
                               </button>
+                              <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 12, opacity: 0.75 }}>Owner:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => __dcPromptOwner(gapId)}
+                                  style={{
+                                    fontSize: 12,
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    border: "1px solid rgba(255,255,255,0.18)",
+                                    background: "rgba(255,255,255,0.06)",
+                                    color: "inherit",
+                                    cursor: "pointer",
+                                  }}
+                                  title="Click to override owner (UI-only)"
+                                >
+                                  {__dcReadOwner(gapId) ?? "AUTO"}
+                                </button>
+                              </div>
+                              </>
                             );
                           })()}
                         </td>
@@ -341,6 +360,8 @@ background: stylePack.bg,
     </div>
   );
 }
+
+
 
 
 
