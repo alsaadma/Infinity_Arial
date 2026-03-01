@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.bak_*
+*.BROKEN_SAVE_*
+C.bak_*
+PATCH_*.ps1
+tools_scan_*.js
+tools_scan_*.cjs
