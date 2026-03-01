@@ -28,3 +28,7 @@ C.bak_*
 PATCH_*.ps1
 tools_scan_*.js
 tools_scan_*.cjs
+
+# Temp TSX backups
+*.bak_*
+*.broken_*
