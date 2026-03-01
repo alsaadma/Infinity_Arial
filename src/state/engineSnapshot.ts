@@ -1,4 +1,23 @@
-import { useSyncExternalStore } from "react";
+﻿import { useSyncExternalStore } from "react";
+const SNAPSHOT_KEY = "drones_calc.engineSnapshot.v1";
+
+function __readSnapshotFromStorage<T>(): T | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function __writeSnapshotToStorage<T>(snap: T | null) {
+  try {
+    if (typeof window === "undefined") return;
+    if (!snap) window.localStorage.removeItem(SNAPSHOT_KEY);
+    else window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap));
+  } catch {}
+}
 
 /**
  * Minimal shared "last computed result" snapshot.
@@ -39,12 +58,13 @@ export type EngineSnapshot = {
 
 type Listener = () => void;
 
-let _snapshot: EngineSnapshot | null = null;
+let _snapshot: EngineSnapshot | null = __readSnapshotFromStorage<EngineSnapshot>() ?? null;
 const _listeners = new Set<Listener>();
 
 export function setEngineSnapshot(next: EngineSnapshot) {
   _snapshot = next;
-  for (const l of _listeners) l();
+  __writeSnapshotToStorage(next);
+for (const l of _listeners) l();
 }
 
 export function getEngineSnapshot(): EngineSnapshot | null {

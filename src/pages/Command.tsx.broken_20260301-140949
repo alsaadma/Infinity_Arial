@@ -4,36 +4,6 @@ import React from "react";
 import { useEngineSnapshot } from "../state/engineSnapshot";
 
 function clamp(n: number, min: number, max: number) {
-  // --- Owner override (UI-only, persisted) ---
-  const __dcOwnerKey = (id: string) => `drones_calc.command.ownerOverride.${id}`;
-  const __dcGetOwnerOverride = (id: string): string | null => {
-    try {
-      const v = localStorage.getItem(__dcOwnerKey(id));
-      return (v && v.trim().length) ? v : null;
-    } catch {
-      return null;
-    }
-  };
-  const __dcSetOwnerOverride = (id: string, owner: string | null) => {
-    try {
-      const key = __dcOwnerKey(id);
-      if (!owner || !owner.trim().length) localStorage.removeItem(key);
-      else localStorage.setItem(key, owner.trim());
-    } catch {
-      // ignore
-    }
-  };
-  const __dcPromptOwnerOverride = (id: string) => {
-    const current = __dcGetOwnerOverride(id) ?? "AUTO";
-    const next = window.prompt("Owner override (blank = AUTO):", current === "AUTO" ? "" : current);
-    if (next === null) return;
-    const trimmed = (next ?? "").trim();
-    __dcSetOwnerOverride(id, trimmed.length ? trimmed : null);
-    try { (window as any).__DC_CMD_OWNER_BUMP__ = ((window as any).__DC_CMD_OWNER_BUMP__ ?? 0) + 1; } catch {}
-  };
-
-  void __dcPromptOwnerOverride;
-
   return Math.max(min, Math.min(max, n));
 }
 
@@ -50,7 +20,6 @@ export default function Command() {
   const gapsCount = result?.gaps_ranked?.length ?? 0;
   const readiness = (result?.readiness as string | undefined) ?? "UNKNOWN";
   const reliabilityIndex = computeReliabilityIndex(readiness, gapsCount);
-  const [, setApStatusTick] = React.useState(0);
   const [apGroupMode, setApGroupMode] = React.useState<"DOMINANCE" | "NONE">("DOMINANCE");
   // ---- labels (UI-only; keep engine schema stable) ----
   const __dcLabelDomain = (raw: any): string => {
@@ -73,24 +42,6 @@ export default function Command() {
     return map[k] ?? k;
   };
   // -----------------------------------------------
-
-  // ---- Status (UI-only; stored in localStorage) ----
-  const __dcGapId = (g: any, idx: number) => String(g?.id ?? g?.gap_id ?? g?.code ?? ("gap_" + idx));
-  const __dcStatusKey = (gapId: string) => "dc:gapStatus:" + gapId;
-  const __dcReadStatus = (gapId: string): "Open" | "In Progress" | "Mitigated" => {
-    try {
-      const v = String(localStorage.getItem(__dcStatusKey(gapId)) ?? "").trim();
-      if (v === "In Progress" || v === "Mitigated" || v === "Open") return v as any;
-    } catch {}
-    return "Open";
-  };
-  const __dcNextStatus = (s: "Open" | "In Progress" | "Mitigated") =>
-    (s === "Open" ? "In Progress" : s === "In Progress" ? "Mitigated" : "Open");
-  const __dcSetStatus = (gapId: string, s: "Open" | "In Progress" | "Mitigated") => {
-    try { localStorage.setItem(__dcStatusKey(gapId), s); } catch {}
-    setApStatusTick((x) => x + 1);
-  };
-  // ---------------------------------------------------
 
   // ---- Action Plan grouping (UI-only; dominance heuristic) ----
   const apRows = (result?.gaps_ranked ?? []).slice(0, 20);
@@ -123,10 +74,9 @@ export default function Command() {
       return out;
     });
   }, [apGroupMode, result]);
-  // -----------------------------------------------
+  // ------------------------------------------------------------
 
-  
-  // ---------------------------------------------------
+
 
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
@@ -218,50 +168,51 @@ export default function Command() {
                       <th style={{ padding: "8px 6px" }}>Gap</th>
                       <th style={{ padding: "8px 6px" }}>Domain</th>
                       <th style={{ padding: "8px 6px" }}>Owner (suggested)</th>
+<th style={{ padding: "8px 6px" }}>Due (days)</th>
+<th style={{ padding: "8px 6px" }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    
-  {apGroups.map((grp, gi) => (
+                    <tbody>
+  {apGroups.map((grp: any, gi: number) => (
     <React.Fragment key={"grp_" + gi}>
       {apGroupMode !== "NONE" ? (
         <tr
-  style={{
-    borderTop: "1px solid rgba(255,255,255,0.18)",
-    background: (grp.title.startsWith("P0") ? "rgba(255, 80, 80, 0.08)" : grp.title.startsWith("P1") ? "rgba(255, 170, 70, 0.08)" : "rgba(255,255,255,0.04)"),
-  }}
->
-  <td
-    colSpan={5}
-    style={{
-      padding: "10px 10px",
-      fontWeight: 900,
-      letterSpacing: 0.2,
-      borderLeft: (grp.title.startsWith("P0") ? "4px solid rgba(255, 80, 80, 0.9)" : grp.title.startsWith("P1") ? "4px solid rgba(255, 170, 70, 0.9)" : "4px solid rgba(255,255,255,0.35)"),
-    }}
-  >
-    <span style={{ marginRight: 10 }}>
-      {grp.title}
-    </span>
+          style={{
+            borderTop: "1px solid rgba(255,255,255,0.18)",
+            background: (grp.title.startsWith("P0") ? "rgba(255, 80, 80, 0.08)" : grp.title.startsWith("P1") ? "rgba(255, 170, 70, 0.08)" : "rgba(255,255,255,0.04)"),
+          }}
+        >
+          <td
+            colSpan={6}
+            style={{
+              padding: "10px 10px",
+              fontWeight: 900,
+              letterSpacing: 0.2,
+              borderLeft: (grp.title.startsWith("P0") ? "4px solid rgba(255, 80, 80, 0.9)" : grp.title.startsWith("P1") ? "4px solid rgba(255, 170, 70, 0.9)" : "4px solid rgba(255,255,255,0.35)"),
+            }}
+          >
+            <span style={{ marginRight: 10 }}>{grp.title}</span>
 
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 900,
-        opacity: 0.95,
-}}
-    >
-      {grp.title.startsWith("P0") ? "CRITICAL" : grp.title.startsWith("P1") ? "HIGH" : "OTHER"}
-    </span>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 900,
+                opacity: 0.95,
+                border: "1px solid rgba(255,255,255,0.22)",
+              }}
+            >
+              {grp.title.startsWith("P0") ? "CRITICAL" : grp.title.startsWith("P1") ? "HIGH" : "OTHER"}
+            </span>
 
-    <span style={{ marginLeft: 10, opacity: 0.75, fontWeight: 800 }}>
-      ({grp.rows.length})
-    </span>
-  </td>
-</tr>
+            <span style={{ marginLeft: 10, opacity: 0.75, fontWeight: 800 }}>
+              ({grp.rows.length})
+            </span>
+          </td>
+        </tr>
       ) : null}
 
       {grp.rows.map((g: any, idx: number) => (
@@ -269,14 +220,19 @@ export default function Command() {
           key={(g.id ?? "gap") + "_" + gi + "_" + idx}
           style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
         >
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>{(grp.offset ?? 0) + idx + 1}</td>
-          <td style={{ padding: "8px 6px" }}>
+          <td style={{ padding: "8px 6px", opacity: 0.85 }}>
+            {(grp.offset ?? 0) + idx + 1}
+          </td>
+
+          <td style={{ padding: "8px 10px" }}>
             {__dcLabelGap(g.title ?? (g as any).name ?? (g as any).label ?? (g.id ?? (g as any).category ?? "-"))}
           </td>
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>
+
+          <td style={{ padding: "8px 10px", opacity: 0.85 }}>
             {__dcLabelDomain(g.domain ?? (g as any).category ?? (g as any).type ?? "-")}
           </td>
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>
+
+          <td style={{ padding: "8px 10px", opacity: 0.85 }}>
             {(() => {
               const dl = __dcLabelDomain(g.domain ?? (g as any).category ?? (g as any).type ?? "-");
               const o = (g.owner_suggestion ?? (g as any).owner ?? (g as any).team ?? "");
@@ -287,43 +243,32 @@ export default function Command() {
               } as any)[dl] ?? "-");
             })()}
           </td>
-                        <td style={{ padding: "8px 6px" }}>
-                          {(() => {
-                            const gapId = __dcGapId(g, (grp.offset ?? 0) + idx);
-                            const st = __dcReadStatus(gapId);
-                            const stylePack =
-  st === "Mitigated"
-    ? { bg: "rgba(80, 200, 120, 0.18)", bd: "rgba(80, 200, 120, 0.55)" }
-    : st === "In Progress"
-    ? { bg: "rgba(255, 170, 70, 0.18)", bd: "rgba(255, 170, 70, 0.55)" }
-    : { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.22)" };
 
-return (
-                              <button
-                                type="button"
-                                onClick={() => __dcSetStatus(gapId, __dcNextStatus(st))}
-                                title="Click to cycle status"
-                                style={{
-                                  cursor: "pointer",
-                                  padding: "3px 10px",
-                                  borderRadius: 999,
-                                  fontSize: 12,
-                                  fontWeight: 900,
-background: stylePack.bg,
-                                  border: "1px solid " + stylePack.bd,
-                                  color: "inherit",
-                                }}
-                              >
-                                {st}
-                              </button>
-                            );
-                          })()}
-                        </td>
+          <td style={{ padding: "8px 10px", fontWeight: 800 }}>
+            {grp.title.startsWith("P0") ? 7 : grp.title.startsWith("P1") ? 30 : 45}
+          </td>
+
+          <td style={{ padding: "8px 10px" }}>
+            <span
+              style={{
+                padding: "3px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 900,
+                border: "1px solid rgba(255,255,255,0.22)",
+                background: "rgba(255,255,255,0.06)",
+              }}
+            >
+              Open
+            </span>
+          </td>
         </tr>
       ))}
     </React.Fragment>
   ))}
 </tbody>
+</tbody>
+                  </tbody>
                 </table>
 
                 <div style={{ marginTop: 8, opacity: 0.65, fontSize: 12 }}>
@@ -341,6 +286,10 @@ background: stylePack.bg,
     </div>
   );
 }
+
+
+
+
 
 
 
