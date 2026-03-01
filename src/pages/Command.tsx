@@ -62,10 +62,10 @@ export default function Command() {
   };
 
   // ---- Owner override (UI-only; stored in localStorage) ----
- const __dcOwnerKey2 = (gapId: string) => "dc:gapOwner:" + gapId;
+ const __dcOwnerKey = (gapId: string) => "dc:gapOwner:" + gapId;
  const __dcReadOwner = (gapId: string): string | null => {
     try {
-      const v = String(localStorage.getItem(__dcOwnerKey2(gapId)) ?? "").trim();
+      const v = String(localStorage.getItem(__dcOwnerKey(gapId)) ?? "").trim();
       return v.length ? v : null;
     } catch {
       return null;
@@ -73,7 +73,7 @@ export default function Command() {
   };
  const __dcSetOwner = (gapId: string, owner: string | null) => {
     try {
-      const key = __dcOwnerKey2(gapId);
+      const key = __dcOwnerKey(gapId);
       if (!owner || !owner.trim().length) localStorage.removeItem(key);
       else localStorage.setItem(key, owner.trim());
     } catch {}
@@ -360,6 +360,7 @@ background: stylePack.bg,
     </div>
   );
 }
+
 
 
 
