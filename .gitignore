@@ -32,3 +32,26 @@ tools_scan_*.cjs
 # Temp TSX backups
 *.bak_*
 *.broken_*
+
+# -- Drones Calc: generated / dev artifacts ------------------
+DC-*.ps1
+run_migrate_shows.ps1
+build.out.txt
+lint.out.txt
+eslint-report.json
+package.json.corruptcopy*
+
+# Backup files from patch workflow
+*.bak_*
+*.backup_*
+*.__tmp
+*.pre_restore_*
+
+# SQLite databases — never commit
+server/data/*.sqlite
+server/data/*.sqlite-wal
+server/data/*.sqlite-shm
+
+# Seed scripts (self-delete but guard anyway)
+server/seed_*_dev.cjs
+server/reset_*_dev.cjs

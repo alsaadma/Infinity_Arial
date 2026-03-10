@@ -1,365 +1,906 @@
-﻿import { Link } from "react-router-dom";
-
 import React from "react";
-import { useEngineSnapshot } from "../state/engineSnapshot";
+import { normalizeUiText } from "../core/text/normalizeUiText";
+// Link import removed — unused in current Command view
+import CapacityRiskPanel from "./command/CapacityRiskPanel";
+import ActionPlanPanel from "./command/ActionPlanPanel";
+/** ----------------------------
+ * Safe sorting: Status â†’ Severity â†’ Due (stable)
+ * Module-scope helpers (must stay top-level)
+ * ----------------------------- */
+type _SortRowLike = {
+  status?: any;
+  severity?: any;
+  due?: any;
+  dueDate?: any;
+  due_at?: any;
+  dueAt?: any;
+};
 
-function clamp(n: number, min: number, max: number) {
-return Math.max(min, Math.min(max, n));
+function _rankStatus(v: any): number {
+  const s = String(v ?? "").trim();
+  const rank: Record<string, number> = {
+    "Blocked": 0,
+    "In Progress": 1,
+    "Open": 2,
+    "Done": 9,
+  };
+  return (s in rank) ? rank[s] : 50;
 }
 
-function computeReliabilityIndex(readiness: string | undefined, gapsCount: number) {
-  const r = (readiness || "UNKNOWN").toUpperCase();
-  const base = r === "READY" ? 90 : r === "NOT_READY" ? 55 : 65;
-  const penalty = gapsCount * 4;
-  return clamp(Math.round(base - penalty), 0, 100);
+function _rankSeverity(v: any): number {
+  const s = String(v ?? "").trim();
+  const rank: Record<string, number> = {
+    "Critical": 0,
+    "High": 1,
+    "Med": 2,
+    "Medium": 2,
+    "Low": 3,
+  };
+  return (s in rank) ? rank[s] : 50;
 }
 
-export default function Command() {
-  const snap = useEngineSnapshot();
-  const result = snap?.result;
-  const gapsCount = result?.gaps_ranked?.length ?? 0;
-  const readiness = (result?.readiness as string | undefined) ?? "UNKNOWN";
-  const reliabilityIndex = computeReliabilityIndex(readiness, gapsCount);
-  const [, setApStatusTick] = React.useState(0);
-  const [apGroupMode, setApGroupMode] = React.useState<"DOMINANCE" | "NONE">("DOMINANCE");
-  // ---- labels (UI-only; keep engine schema stable) ----
-  const __dcLabelDomain = (raw: any): string => {
-    const k = String(raw ?? "").trim();
-    if (!k) return "-";
-    const map: Record<string, string> = {
-      "DRONES_AVAILABILITY": "Drone availability (fleet capacity vs required)",
-      "CHARGING_CAPACITY": "Charging capacity (turnaround bottleneck)",
+function _parseDue(row: _SortRowLike): number {
+  const raw = (row?.due ?? row?.dueDate ?? row?.due_at ?? row?.dueAt);
+  if (raw == null || raw === "") return Number.POSITIVE_INFINITY;
+  const t =
+    raw instanceof Date ? raw.getTime() :
+    (typeof raw === "number" ? raw : Date.parse(String(raw)));
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
+
+function _sortActionPlanRowsStable<T extends _SortRowLike>(rows: T[]): T[] {
+  const decorated = rows.map((r, i) => ({ r, i }));
+  decorated.sort((a, b) => {
+    const as = _rankStatus(a.r.status);
+    const bs = _rankStatus(b.r.status);
+    if (as !== bs) return as - bs;
+
+    const av = _rankSeverity(a.r.severity);
+    const bv = _rankSeverity(b.r.severity);
+    if (av !== bv) return av - bv;
+
+    const ad = _parseDue(a.r);
+    const bd = _parseDue(b.r);
+    if (ad !== bd) return ad - bd;
+
+    return a.i - b.i;
+  });
+  return decorated.map(x => x.r);
+}
+
+type Severity = "Critical" | "High" | "Med" | "Low";
+type ActionPlanRow = {
+  id: string;
+  title: string;
+  severity?: Severity;
+  owner?: string;
+  due?: string;
+  status?: "Open" | "In Progress" | "Blocked" | "Done";
+};
+
+type CommandResult = {
+  updatedAt: string;
+  summary: {
+    windows: number;
+    fleetAvailable: number;
+    permitsTotal: number;
+    permitsReady: number;
+  };
+
+  windows?: Array<{ id: string; label: string; required: number; start?: string; end?: string }>;
+  actionPlan: ActionPlanRow[];
+  notes?: string[];
+};
+
+const LS_KEY = "drones_calc.command.result.v1";
+
+function riskBadgeStyle(
+  sev: Severity | undefined,
+  status: ActionPlanRow["status"] | undefined
+): React.CSSProperties {
+  const base: React.CSSProperties = {
+    display: "inline-block",
+    padding: "2px 8px",
+    borderRadius: 999,
+    fontSize: 18,
+    lineHeight: "18px",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.85)",
+    whiteSpace: "nowrap",
+  };
+
+  // Severity baseline
+  let border = "1px solid rgba(255,255,255,0.18)";
+  let bg = "rgba(255,255,255,0.06)";
+
+  if (sev === "High") {
+    border = "1px solid rgba(255,80,80,0.55)";
+    bg = "rgba(255,80,80,0.14)";
+  } else if (sev === "Med") {
+    border = "1px solid rgba(255,200,80,0.55)";
+    bg = "rgba(255,200,80,0.14)";
+  } else if (sev === "Low") {
+    border = "1px solid rgba(120,220,160,0.55)";
+    bg = "rgba(120,220,160,0.12)";
+  }
+
+  // Status modifier (severity + status).
+  // Done should be quiet. Blocked should be loud.
+  if (status === "Done") {
+    return {
+      ...base,
+      border: "1px solid rgba(255,255,255,0.12)",
+      background: "rgba(255,255,255,0.04)",
+      color: "rgba(255,255,255,0.55)",
+      opacity: 0.8,
     };
-    return map[k] ?? k;
-  };
+  }
 
-  const __dcLabelGap = (raw: any): string => {
-    const k = String(raw ?? "").trim();
-    if (!k) return "-";
-    const map: Record<string, string> = {
-      "GAP-DRONES-AVAIL": "Insufficient drones available for window",
-      "GAP-CHARGING": "Charging capacity limits turnaround",
+  if (status === "Blocked") {
+    // Escalate: even Med/Low becomes attention-worthy
+    return {
+      ...base,
+      border: "1px solid rgba(255,80,80,0.75)",
+      background: "rgba(255,80,80,0.22)",
+      color: "rgba(255,255,255,0.92)",
+      boxShadow: "0 0 0 2px rgba(255,80,80,0.10)",
     };
-    return map[k] ?? k;
-  };
-  // -----------------------------------------------
+  }
 
-  // ---- Status (UI-only; stored in localStorage) ----
-  const __dcGapId = (g: any, idx: number) => String(g?.id ?? g?.gap_id ?? g?.code ?? ("gap_" + idx));
-  const __dcStatusKey = (gapId: string) => "dc:gapStatus:" + gapId;
-  const __dcReadStatus = (gapId: string): "Open" | "In Progress" | "Mitigated" => {
-    try {
-      const v = String(localStorage.getItem(__dcStatusKey(gapId)) ?? "").trim();
-      if (v === "In Progress" || v === "Mitigated" || v === "Open") return v as any;
-    } catch {}
-    return "Open";
-  };
-  const __dcNextStatus = (s: "Open" | "In Progress" | "Mitigated") =>
-    (s === "Open" ? "In Progress" : s === "In Progress" ? "Mitigated" : "Open");
-  const __dcSetStatus = (gapId: string, s: "Open" | "In Progress" | "Mitigated") => {
-    try { localStorage.setItem(__dcStatusKey(gapId), s); } catch {}
-    setApStatusTick((x) => x + 1);
-  };
+  if (status === "In Progress") {
+    // Slightly stronger than Open
+    return {
+      ...base,
+      border,
+      background: bg,
+      boxShadow: "0 0 0 1px rgba(255,255,255,0.06)",
+    };
+  }
 
-  // ---- Owner override (UI-only; stored in localStorage) ----
- const __dcOwnerKey = (gapId: string) => "dc:gapOwner:" + gapId;
- const __dcReadOwner = (gapId: string): string | null => {
-    try {
-      const v = String(localStorage.getItem(__dcOwnerKey(gapId)) ?? "").trim();
-      return v.length ? v : null;
-    } catch {
-      return null;
-    }
-  };
- const __dcSetOwner = (gapId: string, owner: string | null) => {
-    try {
-      const key = __dcOwnerKey(gapId);
-      if (!owner || !owner.trim().length) localStorage.removeItem(key);
-      else localStorage.setItem(key, owner.trim());
-    } catch {}
-    // refresh UI using existing tick pattern
-    setApStatusTick((x) => x + 1);
-  };
- const __dcPromptOwner = (gapId: string) => {
-    const current = __dcReadOwner(gapId) ?? "AUTO";
-    const next = window.prompt("Owner override (blank = AUTO):", current === "AUTO" ? "" : current);
-    if (next === null) return;
-    const trimmed = String(next ?? "").trim();
-    __dcSetOwner(gapId, trimmed.length ? trimmed : null);
-  };
+  // Open / default
+  return { ...base, border, background: bg };
+}
+function safeParse<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
-  // ---------------------------------------------------
+function loadResult(): CommandResult | null {
+  return safeParse<CommandResult>(localStorage.getItem(LS_KEY));
+}
 
-  // ---- Action Plan grouping (UI-only; dominance heuristic) ----
-  const apRows = (result?.gaps_ranked ?? []).slice(0, 20);
-  const apDominanceKey = (g: any): number => {
-    const dk = String(g.domain ?? (g as any).category ?? (g as any).type ?? "").trim();
-    // Lower = more dominant
-    if (dk === "DRONES_AVAILABILITY") return 0; // P0 blocker
-    if (dk === "CHARGING_CAPACITY") return 2;   // P1 blocker
-    return 6;
+function saveResult(result: CommandResult): void {
+  localStorage.setItem(LS_KEY, JSON.stringify(result));
+}
+
+function clearResult(): void {
+  localStorage.removeItem(LS_KEY);
+}
+
+function seedSample(): CommandResult {
+  const now = new Date().toISOString();
+  return {
+    updatedAt: now,
+    summary: {
+      windows: 3,
+      fleetAvailable: 1000,
+      permitsTotal: 6,
+      permitsReady: 2,
+    },
+    windows: [
+      {
+        id: "win-riyadh-season",
+        label: "Riyadh Season (Oct-Mar)",
+        required: 1000,
+        start: "2025-10-01",
+        end: "2026-03-31",
+      },
+      {
+        id: "win-alula-winter",
+        label: "AlUla Winter (Dec-Feb)",
+        required: 1000,
+        start: "2025-12-01",
+        end: "2026-02-28",
+      },
+      {
+        id: "win-jeddah-season",
+        label: "Jeddah Season (May-Jun)",
+        required: 800,
+        start: "2026-05-01",
+        end: "2026-06-30",
+      },
+    ],
+    actionPlan: [
+      {
+        id: "AP-001",
+        title: "Confirm winter window sponsor & scope",
+        severity: "High",
+        owner: "BD",
+        due: "2026-03-15",
+        status: "Open",
+      },
+      {
+        id: "AP-002",
+        title: "Create permit checklist baseline for Riyadh",
+        severity: "Med",
+        owner: "Ops",
+        due: "2026-03-20",
+        status: "In Progress",
+      },
+      {
+        id: "AP-003",
+        title: "Draft mitigation plan for Riyadh permit delays",
+        severity: "Low",
+        owner: "Ops",
+        due: "2026-03-25",
+        status: "Blocked",
+      },
+      {
+        id: "AP-004",
+        title: "Escalate sponsor confirmation to executive level",
+        severity: "High",
+        owner: "BD",
+        due: "2026-03-28",
+        status: "Blocked",
+      },
+      {
+        id: "AP-005",
+        title: "Kick off temperature & wind envelope validation",
+        severity: "High",
+        owner: "Ops",
+        due: "2026-03-10",
+        status: "In Progress",
+      },
+      {
+        id: "AP-006",
+        title: "Collect vendor quotes for backup batteries",
+        severity: "Med",
+        owner: "Procurement",
+        status: "Open",
+      },    ],
+    notes: ["Seeded demo data. Replace with Command read model later."],
   };
-  const apGroupTitle = (k: number): string => {
-    if (k === 0) return "P0 · Blocker";
-    if (k === 2) return "P1 · Blocker";
-    return "Other";
-  };
-  const apGroups = React.useMemo(() => {
-    if (apGroupMode === "NONE") return [{ title: "All actions", rows: apRows, offset: 0 }];
-    const map = new Map<number, any[]>();
-    for (const g of apRows) {
-      const k = apDominanceKey(g);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(g);
-    }
-    const keys = Array.from(map.keys()).sort((a,b)=>a-b);
-    let off = 0;
-    return keys.map((k) => {
-      const rows = map.get(k)!;
-      const out = { title: apGroupTitle(k), rows, offset: off };
-      off += rows.length;
-      return out;
-    });
-  }, [apGroupMode, result]);
-  // -----------------------------------------------
+}
 
-  
-  // ---------------------------------------------------
-
+function NoState(props: { onSeed: () => void }) {
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Command</h1>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>
-            Read-only operational view (no JSON input)
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link to="/quote-builder">Quote Builder</Link>
-          <span style={{ opacity: 0.4 }}>|</span>
-          <Link to="/fleet">Fleet</Link>
-          <Link to="/calendar">Calendar</Link>
-          <Link to="/reports">Reports</Link>
-        </div>
+    <div
+      style={{
+        marginTop: 16,
+        padding: 14,
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ fontSize: 18, opacity: 0.9, marginBottom: 10 }}>
+        No Command state yet.
       </div>
 
-      {!result ? (
-        <div style={{ marginTop: 18, padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-          <div style={{ fontWeight: 600 }}>No computed state yet</div>
-          <div style={{ opacity: 0.8, marginTop: 6 }}>
-            Go to <Link to="/quote-builder">Quote Builder</Link>, run Compute, then return here.
-          </div>
-        </div>
-      ) : (
-        <>
-          <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-            <div style={{ padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-              <div style={{ fontWeight: 700 }}>Fleet Summary (mock)</div>
-              <div style={{ marginTop: 10, lineHeight: 1.7, opacity: 0.9 }}>
-                <div>Fleet size: {result.fleet?.fleet_size ?? "-"}</div>
-                <div>Expected shows/year: {result.fleet?.expected_shows_per_year ?? "-"}</div>
-                <div>CAPEX (SAR): {result.fleet?.capex_sar ?? "-"}</div>
-              </div>
-              <div style={{ marginTop: 10, opacity: 0.7, fontSize: 12 }}>
-                (Will be replaced by real engine fleet outputs)
-              </div>
-            </div>
-
-            <div style={{ padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-              <div style={{ fontWeight: 700 }}>Reliability Index</div>
-              <div style={{ marginTop: 10, fontSize: 34, fontWeight: 800 }}>
-                {reliabilityIndex}
-                <span style={{ fontSize: 14, opacity: 0.7, marginLeft: 8 }}>/ 100</span>
-              </div>
-              <div style={{ marginTop: 6, opacity: 0.85 }}>
-                Readiness: <b>{readiness}</b> · Gaps: <b>{gapsCount}</b>
-              </div>
-            </div>
-
-            <div style={{ padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-              <div style={{ fontWeight: 700 }}>Permits (placeholder)</div>
-              <div style={{ marginTop: 10, opacity: 0.85 }}>
-                GACA / city permits panel placeholder
-              </div>
-            </div>
-
-            <div style={{ padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-              <div style={{ fontWeight: 700 }}>Calendar (placeholder)</div>
-              <div style={{ marginTop: 10, opacity: 0.85 }}>
-                Ops calendar placeholder (shows + mobilization)
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 18, padding: 14, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10 }}>
-  <div style={{ fontWeight: 800 }}>Action Plan (basic list)</div>
-  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-    <span style={{ opacity: 0.7, fontSize: 12 }}>Group:</span>
-    <select value={apGroupMode} onChange={(e) => setApGroupMode(e.target.value as any)} style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "inherit" }}>
-      <option value="DOMINANCE">Dominance</option>
-      <option value="NONE">None</option>
-    </select>
-  </div>
-</div>
-
-            {gapsCount === 0 ? (
-              <div style={{ opacity: 0.8 }}>No gaps in the last computed result.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ textAlign: "left", opacity: 0.9 }}>
-                      <th style={{ padding: "8px 6px" }}>#</th>
-                      <th style={{ padding: "8px 6px" }}>Gap</th>
-                      <th style={{ padding: "8px 6px" }}>Domain</th>
-                      <th style={{ padding: "8px 6px" }}>Owner (suggested)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    
-  {apGroups.map((grp, gi) => (
-    <React.Fragment key={"grp_" + gi}>
-      {apGroupMode !== "NONE" ? (
-        <tr
-  style={{
-    borderTop: "1px solid rgba(255,255,255,0.18)",
-    background: (grp.title.startsWith("P0") ? "rgba(255, 80, 80, 0.08)" : grp.title.startsWith("P1") ? "rgba(255, 170, 70, 0.08)" : "rgba(255,255,255,0.04)"),
-  }}
->
-  <td
-    colSpan={5}
-    style={{
-      padding: "10px 10px",
-      fontWeight: 900,
-      letterSpacing: 0.2,
-      borderLeft: (grp.title.startsWith("P0") ? "4px solid rgba(255, 80, 80, 0.9)" : grp.title.startsWith("P1") ? "4px solid rgba(255, 170, 70, 0.9)" : "4px solid rgba(255,255,255,0.35)"),
-    }}
-  >
-    <span style={{ marginRight: 10 }}>
-      {grp.title}
-    </span>
-
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 900,
-        opacity: 0.95,
-}}
-    >
-      {grp.title.startsWith("P0") ? "CRITICAL" : grp.title.startsWith("P1") ? "HIGH" : "OTHER"}
-    </span>
-
-    <span style={{ marginLeft: 10, opacity: 0.75, fontWeight: 800 }}>
-      ({grp.rows.length})
-    </span>
-  </td>
-</tr>
-      ) : null}
-
-      {grp.rows.map((g: any, idx: number) => (
-        <tr
-          key={(g.id ?? "gap") + "_" + gi + "_" + idx}
-          style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>{(grp.offset ?? 0) + idx + 1}</td>
-          <td style={{ padding: "8px 6px" }}>
-            {__dcLabelGap(g.title ?? (g as any).name ?? (g as any).label ?? (g.id ?? (g as any).category ?? "-"))}
-          </td>
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>
-            {__dcLabelDomain(g.domain ?? (g as any).category ?? (g as any).type ?? "-")}
-          </td>
-          <td style={{ padding: "8px 6px", opacity: 0.85 }}>
-            {(() => {
-              const dl = __dcLabelDomain(g.domain ?? (g as any).category ?? (g as any).type ?? "-");
-              const o = (g.owner_suggestion ?? (g as any).owner ?? (g as any).team ?? "");
-              if (String(o).trim().length > 0 && String(o).trim() !== "-") return o;
-              return (({
-                "Drone availability (fleet capacity vs required)": "Fleet/Ops",
-                "Charging capacity (turnaround bottleneck)": "Ops",
-              } as any)[dl] ?? "-");
-            })()}
-          </td>
-                        <td style={{ padding: "8px 6px" }}>
-                          {(() => {
-                            const gapId = __dcGapId(g, (grp.offset ?? 0) + idx);
-                            const st = __dcReadStatus(gapId);
-                            const stylePack =
-  st === "Mitigated"
-    ? { bg: "rgba(80, 200, 120, 0.18)", bd: "rgba(80, 200, 120, 0.55)" }
-    : st === "In Progress"
-    ? { bg: "rgba(255, 170, 70, 0.18)", bd: "rgba(255, 170, 70, 0.55)" }
-    : { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.22)" };
-
-return (
-                              <>
-                              <button
-                                type="button"
-                                onClick={() => __dcSetStatus(gapId, __dcNextStatus(st))}
-                                title="Click to cycle status"
-                                style={{
-                                  cursor: "pointer",
-                                  padding: "3px 10px",
-                                  borderRadius: 999,
-                                  fontSize: 12,
-                                  fontWeight: 900,
-background: stylePack.bg,
-                                  border: "1px solid " + stylePack.bd,
-                                  color: "inherit",
-                                }}
-                              >
-                                {st}
-                              </button>
-                              <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 12, opacity: 0.75 }}>Owner:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => __dcPromptOwner(gapId)}
-                                  style={{
-                                    fontSize: 12,
-                                    padding: "2px 8px",
-                                    borderRadius: 999,
-                                    border: "1px solid rgba(255,255,255,0.18)",
-                                    background: "rgba(255,255,255,0.06)",
-                                    color: "inherit",
-                                    cursor: "pointer",
-                                  }}
-                                  title="Click to override owner (UI-only)"
-                                >
-                                  {__dcReadOwner(gapId) ?? "AUTO"}
-                                </button>
-                              </div>
-                              </>
-                            );
-                          })()}
-                        </td>
-        </tr>
-      ))}
-    </React.Fragment>
-  ))}
-</tbody>
-                </table>
-
-                <div style={{ marginTop: 8, opacity: 0.65, fontSize: 12 }}>
-                  Note: Grouped by operational dominance. Clear P0 blockers first, then P1.
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: 10, opacity: 0.6, fontSize: 12 }}>
-            Last computed: {snap?.computedAtISO ?? "-"}
-          </div>
-        </>
-      )}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={props.onSeed} style={{ padding: "8px 10px", borderRadius: 10 }}>
+          Seed sample state
+        </button>
+      </div>
     </div>
   );
 }
+
+function ElseBranch(props: {
+  result: CommandResult;
+  onReseed: () => void;
+  onClear: () => void;
+}) {
+  const { result } = props;
+          
+  const __dcHardResetLocal = () => {
+    try { localStorage.removeItem(LS_KEY); } catch {}
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k === LS_KEY || k.startsWith("dc:apB:")) keys.push(k);
+      }
+      for (const k of keys) {
+        try { localStorage.removeItem(k); } catch {}
+      }
+    } catch {}
+    try { window.location.reload(); } catch {}
+  };
+//## APB_CLEAN_DEFS2_BEGIN
+        // Action Plan (B) Clean, semi-manual (component-scope, BEFORE JSX)
+        type ActionPlanStatus = "TODO" | "IN_PROGRESS" | "BLOCKED" | "DONE";
+        type ActionPlanRow = {
+          id: string;
+          title: string;
+          detail?: string;
+          severity?: string;
+          owner?: string;
+          due?: string;
+          status?: ActionPlanStatus;
+          dismissed?: boolean;
+        };
+
+        const __dcApKey = (id: string, field: "owner" | "due" | "status" | "dismissed") =>
+          "dc:apB:" + field + ":" + id;
+
+        const __dcApRead = (k: string): string | null => {
+          try { return localStorage.getItem(k); } catch { return null; }
+        };
+
+                const __dcApWrite = (k: string, v: string | null) => {
+          try {
+            if (v == null || String(v).trim() === "") localStorage.removeItem(k);
+            else localStorage.setItem(k, normalizeUiText(v, ""));
+          } catch {}
+        };
+
+        const __dcApReadBool = (k: string): boolean => {
+          const v = __dcApRead(k);
+          return v === "1" || v === "true";
+        };
+
+        const [__apBumpN, __setApBumpN] = React.useState(0);
+        const __dcApBump = () => __setApBumpN(n => n + 1);
+        // Live fleet from SQLite backend (falls back to stored value if server offline)
+        const [__liveFleet, __setLiveFleet] = React.useState<number | null>(null);
+        React.useEffect(() => {
+          fetch("/api/fleet/drones/summary")
+            .then(r => r.ok ? r.json() : null)
+            .then((d: any) => {
+              const v = d?.available_for_planning;
+              if (typeof v === "number") __setLiveFleet(v);
+            })
+            .catch(() => { /* server offline - stored value used */ });
+        }, []);
+        const asNum = (v: any): number | null => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+
+        // Try multiple shapes (seed vs future read model)
+        const summary: any = (result as any)?.summary ?? (result as any)?.computed?.summary ?? null;
+
+        const fleetAvailable =
+          __liveFleet ??                                      // live SQLite (Module 2)
+          asNum(summary?.fleetAvailable) ??                  // stored snapshot fallback
+          asNum((result as any)?.fleetAvailable) ??
+          asNum((result as any)?.computed?.fleetAvailable) ??
+          null;
+
+        //## CAPACITY_RISK_C_BEGIN (window + portfolio)
+        type CapacityRiskLevel = "NONE" | "LOW" | "MED" | "HIGH" | "CRITICAL";
+        type CapacityRisk = {
+          required: number;
+          available: number;
+          shortage: number;
+          shortageRatio: number; // 0..1
+          level: CapacityRiskLevel;
+        };
+        type WindowCapacityRisk = CapacityRisk & {
+          windowId: string;
+          windowLabel: string;
+        };
+const __classifyCapacity = (requiredN: number, availableN: number): CapacityRisk => {
+          const required = Math.max(0, Number(requiredN || 0));
+          const available = Math.max(0, Number(availableN || 0));
+          const shortage = Math.max(0, required - available);
+          const shortageRatio = required <= 0 ? 0 : (shortage / Math.max(1, required));
+
+          const level: CapacityRiskLevel =
+            shortageRatio === 0 ? "NONE" :
+            shortageRatio <= 0.10 ? "LOW" :
+            shortageRatio <= 0.30 ? "MED" :
+            shortageRatio <= 0.60 ? "HIGH" : "CRITICAL";
+
+          return { required, available, shortage, shortageRatio, level };
+        };
+
+        // Window list discovery (robust). We accept multiple possible shapes until L3 read model exists.
+        const windowsAny: any[] = (() => {
+          const r: any = result as any;
+
+          const candidates =
+            r?.windows ??
+            r?.summary?.windows ??
+            r?.summary?.windowsList ??
+            r?.computed?.windows ??
+            r?.calendar?.windows ??
+            r?.data?.windows ??
+            [];
+
+          if (Array.isArray(candidates)) return candidates;
+
+          return [];
+        })();
+
+        // Allocation Simulation (overlap scope)
+        const allocSim: any = (() => {
+          const r: any = result as any;
+          return (
+            r?.allocationSimulation ??
+            r?.computed?.allocationSimulation ??
+            r?.computed?.allocation?.simulation ??
+            r?.projection?.allocationSimulation ??
+            r?.calendar?.allocationSimulation ??
+            r?.summary?.allocationSimulation ??
+            null
+          );
+        })();
+
+        const allocRows: any[] = (() => {
+          const s: any = allocSim;
+          const c =
+            s?.rows ??
+            s?.table ??
+            s?.windows ??
+            s?.items ??
+            s?.data ??
+            [];
+          return Array.isArray(c) ? c : [];
+        })();
+
+        const allocTotalRequired =
+          asNum(allocSim?.totalRequired) ??
+          asNum(allocSim?.total_required) ??
+          asNum(allocSim?.requiredTotal) ??
+          asNum(allocSim?.required_total) ??
+          asNum(allocSim?.totals?.required) ??
+          null;
+
+        const allocTotalAssigned =
+          asNum(allocSim?.totalAssigned) ??
+          asNum(allocSim?.total_assigned) ??
+          asNum(allocSim?.assignedTotal) ??
+          asNum(allocSim?.assigned_total) ??
+          asNum(allocSim?.totals?.assigned) ??
+          null;
+
+        const __asAssigned = (w: any): number | null => {
+          const v =
+            asNum(w?.assigned) ??
+            asNum(w?.allocated) ??
+            asNum(w?.alloc) ??
+            asNum(w?.used) ??
+            asNum(w?.capacityUsed) ??
+            asNum(w?.dronesAssigned);
+          return (v == null || !isFinite(v)) ? null : v;
+        };
+const __asReq = (w: any): number | null => {
+          const v =
+            asNum(w?.required) ??
+            asNum(w?.req) ??
+            asNum(w?.drones) ??
+            asNum(w?.droneCount) ??
+            asNum(w?.drone_count);
+          return (v == null || !isFinite(v)) ? null : v;
+        };
+
+        const windowCapacity: WindowCapacityRisk[] = React.useMemo(() => {
+          const av = Number(fleetAvailable || 0);
+          const out: WindowCapacityRisk[] = [];
+          for (const w of (windowsAny || [])) {
+            const req = __asReq(w);
+            if (req == null) continue;
+            const id = String(w?.id ?? w?.key ?? w?.windowId ?? w?.name ?? "window").trim() || "window";
+                        const label = normalizeUiText(w?.label ?? w?.title ?? w?.name ?? id) || id;
+            const c = __classifyCapacity(req, av);
+            out.push({ windowId: id, windowLabel: label, ...c });
+          }
+          return out;
+        }, [fleetAvailable, result]);
+        const __asTime = (x: any): number | null => {
+          if (x == null || x === "") return null;
+          const t = Date.parse(String(x));
+          return Number.isFinite(t) ? t : null;
+        };
+
+        const __peakOverlapRequired = (rows: any[]): number => {
+          // Sweep line: +required at start, -required at end. End is exclusive.
+          // If dates are missing, fallback to SUM (conservative).
+          if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+          type Ev = { t: number; d: number };
+          const evs: Ev[] = [];
+          let fallbackSum = 0;
+          let hasAnyTime = false;
+
+          for (const w of rows) {
+            const req = __asReq(w) ?? 0;
+            if (req <= 0) continue;
+            fallbackSum += req;
+
+            const s = __asTime(w?.start ?? w?.from ?? w?.startDate);
+            const e = __asTime(w?.end ?? w?.to ?? w?.endDate);
+            if (s == null || e == null) continue;
+            hasAnyTime = true;
+
+            // Ensure start <= end
+            const a = Math.min(s, e);
+            const b = Math.max(s, e);
+            evs.push({ t: a, d: +req });
+            evs.push({ t: b, d: -req });
+          }
+
+          if (!hasAnyTime || evs.length === 0) return fallbackSum;
+
+          // Sort by time, with removals before additions at same timestamp (end exclusive)
+          evs.sort((x, y) => (x.t - y.t) || (x.d - y.d));
+
+          let cur = 0;
+          let peak = 0;
+          for (const ev of evs) {
+            cur += ev.d;
+            if (cur > peak) peak = cur;
+          }
+          return peak;
+        };
+
+        const portfolioRequired = React.useMemo(() => {
+          // Option A: If Allocation Simulation totals exist, they represent overlap-scope demand (primary truth).
+          const r = allocTotalRequired;
+
+
+        // DC_UNUSED_ALLOC_VARS_BEGIN (keeps build clean; safe no-op reads)
+
+        void allocRows;
+
+        void allocTotalAssigned;
+
+        void __asAssigned;
+
+        void windowCapacity;
+
+        void portfolioRequired;
+
+        // DC_UNUSED_ALLOC_VARS_END
+
+          if (r != null) return r;
+
+          // Fallback (until alloc sim exists): peak concurrent demand across overlapping windows.
+          return __peakOverlapRequired(windowsAny || []);
+        }, [allocTotalRequired, result]);
+//## CAPACITY_RISK_C_END
+
+        const __apSuggested: ActionPlanRow[] = React.useMemo(() => {
+  const out: ActionPlanRow[] = [];
+
+  const push = (r: Partial<ActionPlanRow>) => {
+    const id = String(r.id ?? "").trim();
+    if (!id) return;
+    out.push({
+      id,
+      title: String(r.title ?? "Action").trim(),
+      detail: r.detail != null ? String(r.detail) : undefined,
+      severity: r.severity != null ? String(r.severity) : undefined,
+    });
+  };
+  const permitsTotal =
+    asNum(summary?.permitsTotal) ??
+    asNum((result as any)?.permitsTotal) ??
+    asNum((result as any)?.computed?.permitsTotal) ??
+    null;
+
+  const permitsReady =
+    asNum(summary?.permitsReady) ??
+    asNum((result as any)?.permitsReady) ??
+    asNum((result as any)?.computed?.permitsReady) ??
+    null;
+
+  // Permit actions (only if counts exist and indicate missing)
+  if (permitsTotal != null && permitsReady != null && permitsTotal > permitsReady) {
+    const missing = Math.max(0, permitsTotal - permitsReady);
+    push({
+      id: "permits:missing",
+      title: "Close permit readiness gaps",
+      detail: `Permits ready: ${permitsReady}/${permitsTotal} (missing: ${missing}). Review permit pipeline and assign owners.`,
+      severity: missing >= 3 ? "HIGH" : "MED",
+    });
+  }
+
+  // Shortage actions if we can infer "required"
+  /* DC_CAPRISK_C_AP_DISABLED_BEGIN
+
+  if (portfolioRisk.level === "MED" || portfolioRisk.level === "HIGH" || portfolioRisk.level === "CRITICAL") {
+    const sev = (portfolioRisk.level === "CRITICAL" || portfolioRisk.level === "HIGH") ? "HIGH" :
+                (portfolioRisk.level === "MED") ? "MED" : "LOW";
+    push({
+      id: "fleet:portfolio",
+      title: "Resolve fleet capacity shortage (portfolio)",
+      detail: `Portfolio required: ${portfolioRisk.required}, available: ${portfolioRisk.available} (shortage: ${portfolioRisk.shortage}, ratio: ${Math.round(portfolioRisk.shortageRatio * 100)}%).`,
+      severity: sev,
+    });
+  }
+
+  DC_CAPRISK_C_AP_DISABLED_END */
+  /* DC_CAPRISK_C_AP_DISABLED_BEGIN
+
+
+  if (worstWindowRisk && (worstWindowRisk.level === "HIGH" || worstWindowRisk.level === "CRITICAL")) {
+    push({
+      id: "fleet:window:" + worstWindowRisk.windowId,
+      title: `Resolve shortage: ${worstWindowRisk.windowLabel}`,
+      detail: `Window required: ${worstWindowRisk.required}, available: ${worstWindowRisk.available} (shortage: ${worstWindowRisk.shortage}, ratio: ${Math.round(worstWindowRisk.shortageRatio * 100)}%).`,
+      severity: "HIGH",
+    });
+  }
+
+  DC_CAPRISK_C_AP_DISABLED_END */
+
+  // Look for risk-like arrays
+  const risks: any[] =
+    (summary?.risks ?? (result as any)?.risks ?? (result as any)?.computed?.risks ?? []) as any[];
+
+  for (const r of risks) {
+    const rid = String(r?.id ?? r?.riskId ?? "").trim();
+    if (!rid) continue;
+    const sev = String(r?.severity ?? r?.sev ?? r?.level ?? "").trim();
+    push({
+      id: "risk:" + rid,
+      title: String(r?.title ?? r?.name ?? "Risk item"),
+      detail: r?.detail ?? r?.description ?? "",
+      severity: sev || undefined,
+    });
+  }
+
+  // Look for gap-like arrays
+  const gaps: any[] =
+    (summary?.gaps ?? (result as any)?.gaps ?? (result as any)?.computed?.gaps ?? []) as any[];
+
+  for (const g of gaps) {
+    const gid = String(g?.id ?? g?.gapId ?? "").trim();
+    if (!gid) continue;
+    const sev = String(g?.severity ?? g?.sev ?? g?.level ?? "").trim();
+    push({
+      id: "gap:" + gid,
+      title: String(g?.title ?? g?.name ?? "Gap item"),
+      detail: g?.detail ?? g?.description ?? "",
+      severity: sev || undefined,
+    });
+  }
+
+  // Dedupe
+  const seen = new Set<string>();
+  return out.filter(x => (seen.has(x.id) ? false : (seen.add(x.id), true)));
+}, [result]);
+
+const actionPlanMerged: ActionPlanRow[] = React.useMemo(() => {
+          void __apBumpN;
+
+          const merged = __apSuggested.map(r => {
+            const owner = __dcApRead(__dcApKey(r.id, "owner")) ?? "";
+            const due = __dcApRead(__dcApKey(r.id, "due")) ?? "";
+            const statusRaw = (__dcApRead(__dcApKey(r.id, "status")) ?? "TODO").toUpperCase();
+            const status: ActionPlanStatus =
+              statusRaw === "IN_PROGRESS" ? "IN_PROGRESS" :
+              statusRaw === "BLOCKED" ? "BLOCKED" :
+              statusRaw === "DONE" ? "DONE" : "TODO";
+
+            const dismissed = __dcApReadBool(__dcApKey(r.id, "dismissed"));
+
+            return { ...r, owner: owner || undefined, due: due || undefined, status, dismissed };
+          });
+
+          return merged.filter(x => !x.dismissed);
+        }, [__apSuggested, __apBumpN]);
+        const [apView, setApView] = React.useState<"OPS" | "EXEC">("OPS");
+
+        const apSorted: ActionPlanRow[] = React.useMemo(() => {
+          return _sortActionPlanRowsStable((actionPlanMerged ?? []) as any) as any;
+        }, [actionPlanMerged]);
+
+        const apExecTop: ActionPlanRow[] = React.useMemo(() => {
+          return (apSorted ?? []).slice(0, 3);
+        }, [apSorted]);
+        //## APB_CLEAN_DEFS2_END
+return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        style={{
+          padding: 14,
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 18, opacity: 0.85 }}>Command snapshot</div>
+            <div style={{ fontSize: 18, opacity: 0.7, marginTop: 4 }}>
+              Updated: <b>{result.updatedAt}</b>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={props.onReseed} style={{ padding: "8px 10px", borderRadius: 10 }}>
+              Reseed sample
+            </button>
+            <button onClick={props.onClear} style={{ padding: "8px 10px", borderRadius: 10 }}>
+              Clear state
+            </button>
+            <button onClick={() => __dcHardResetLocal()} style={{ padding: "8px 10px", borderRadius: 10 }}>
+              Hard reset local
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: 14,
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ fontSize: 18, opacity: 0.85, marginBottom: 10 }}>Summary</div>
+
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 18 }}>
+          <div>
+            Windows: <b>{result.summary.windows}</b>
+          </div>
+          <div>
+            Fleet available: <b>{fleetAvailable ?? result.summary.fleetAvailable}</b>
+          </div>
+          <div>
+            Permits:{" "}
+            <b>
+              {result.summary.permitsReady}/{result.summary.permitsTotal}
+            </b>
+          </div>
+
+      {/* DC_CAPRISK_PANEL_BEGIN */}
+<CapacityRiskPanel result={result} />
+{/* DC_CAPRISK_PANEL_END */}
+
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: 14,
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          marginBottom: 12,
+        }}
+      >
+      {/* //## ACTION_PLAN_UI_BEGIN */}
+      <ActionPlanPanel ctx={{ apView, setApView, __apSuggested, actionPlanMerged, apSorted, apExecTop, __dcApWrite, __dcApKey, __dcApBump, riskBadgeStyle }} />
+{/* //## ACTION_PLAN_UI_END */}
+
+
+      {result.notes && result.notes.length > 0 ? (
+        <div
+          style={{
+            padding: 14,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 12,
+          }}
+        >
+          <div style={{ fontSize: 18, opacity: 0.85, marginBottom: 10 }}>Notes</div>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {result.notes.map((n, idx) => (
+              <li key={idx} style={{ fontSize: 18, opacity: 0.85, marginBottom: 6 }}>
+                {n}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div />
+      )}
+    </div>
+  
+      </div>
+    );
+}
+
+export default function Command() {
+  const [result, setResult] = React.useState<CommandResult | null>(() => loadResult());
+
+  const onSeed = React.useCallback(() => {
+    const r = seedSample();
+    saveResult(r);
+    setResult(r);
+  }, []);
+
+  const onClear = React.useCallback(() => {
+    clearResult();
+    setResult(null);
+  }, []);
+
+  // Live fetch: shows + permits on mount → real permit readiness counts.
+  // Falls back to manual seed if server is offline.
+  React.useEffect(() => {
+    Promise.all([
+      fetch("/api/shows").then(r => r.ok ? r.json() : null),
+      fetch("/api/permits").then(r => r.ok ? r.json() : null),
+    ])
+      .then(([showsData, permitsData]: [any, any]) => {
+        // ── Shows → windows ──────────────────────────────
+        const showItems: any[] = Array.isArray(showsData?.items) ? showsData.items : [];
+        const upcoming = showItems.filter((s: any) =>
+          s.status !== "COMPLETED" && s.status !== "CANCELLED"
+        );
+        const windows = upcoming.map((s: any) => ({
+          id:       String(s.id),
+          label:    String(s.name) + (s.venue ? ` \u2014 ${s.venue}` : "") + ` (${s.date})`,
+          required: Number(s.drones_required) || 0,
+          start:    String(s.date),
+        }));
+
+        // ── Permits → readiness counts ───────────────────
+        // permitsTotal = all permits except EXPIRED and REJECTED (active pipeline)
+        // permitsReady = APPROVED only
+        const permitItems: any[] = Array.isArray(permitsData?.items) ? permitsData.items : [];
+        const permitsTotal = permitItems.filter((p: any) =>
+          p.status !== "EXPIRED" && p.status !== "REJECTED"
+        ).length;
+        const permitsReady = permitItems.filter((p: any) =>
+          p.status === "APPROVED"
+        ).length;
+
+        const synthetic: CommandResult = {
+          updatedAt: new Date().toISOString(),
+          summary: {
+            windows:        upcoming.length,
+            fleetAvailable: 0,   // overridden live by __liveFleet in ElseBranch
+            permitsTotal,
+            permitsReady,
+          },
+          windows,
+          actionPlan: [],
+          notes: upcoming.length > 0
+            ? [`Live data \u2014 ${upcoming.length} show(s), ${permitsReady}/${permitsTotal} permits approved.`]
+            : ["No upcoming shows found. Add shows via the Shows page."],
+        };
+        setResult(synthetic);
+      })
+      .catch(() => { /* server offline \u2014 user can seed manually */ });
+  }, []);
+
+  return (
+    <div style={{ padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Command</div>
+          <div style={{ fontSize: 18, opacity: 0.7, marginTop: 2 }}>
+            Read-only projection (safe placeholder)
+          </div>
+        </div>
+
+
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        {!result ? (
+          <NoState onSeed={onSeed} />
+        ) : (
+          <ElseBranch result={result} onReseed={onSeed} onClear={onClear} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
