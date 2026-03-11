@@ -21,6 +21,8 @@ const showsRoutes     = require("./routes/shows.cjs");
 const permitsRoutes   = require("./routes/permits.cjs");
 const readinessRoutes = require("./routes/readiness.cjs");
 const authRoutes      = require("./routes/auth.cjs");
+const costingRoutes   = require("./routes/costing.cjs");
+const utilizationRoutes = require("./routes/utilization.cjs");
 
 const app     = Fastify({ logger: false });
 const DB_PATH = path.join(__dirname, "data", "drones_calc.sqlite");
@@ -86,6 +88,8 @@ async function main() {
   app.register(permitsRoutes);
   app.register(readinessRoutes);
   app.register(authRoutes);
+  app.register(costingRoutes);
+  app.register(utilizationRoutes);
 
   await app.listen({ host, port });
   console.log(`DC backend listening on http://${host}:${port}`);
@@ -95,3 +99,5 @@ main().catch((err) => {
   console.error("DC backend failed to start:", err);
   process.exit(1);
 });
+
+

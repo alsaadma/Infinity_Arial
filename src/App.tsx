@@ -1,14 +1,56 @@
 import React from "react";
-import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import Placeholder from "./pages/Placeholder";
-const Command  = React.lazy(() => import("./pages/Command"));
-const QuoteCalc = React.lazy(() => import("./pages/QuoteCalc"));
-const Fleet    = React.lazy(() => import("./pages/Fleet"));
-const Calendar = React.lazy(() => import("./pages/Calendar"));
-const Assets   = React.lazy(() => import("./pages/Assets"));
-const Shows    = React.lazy(() => import("./pages/Shows"));
-const Permits  = React.lazy(() => import("./pages/Permits"));
-const Readiness = React.lazy(() => import("./pages/Readiness"));
+import Utilization from "./pages/Utilization";
+const Command    = React.lazy(() => import("./pages/Command"));
+const QuoteCalc  = React.lazy(() => import("./pages/QuoteCalc"));
+const Fleet      = React.lazy(() => import("./pages/Fleet"));
+const Calendar   = React.lazy(() => import("./pages/Calendar"));
+const Assets     = React.lazy(() => import("./pages/Assets"));
+const Shows      = React.lazy(() => import("./pages/Shows"));
+const Permits    = React.lazy(() => import("./pages/Permits"));
+const Readiness  = React.lazy(() => import("./pages/Readiness"));
+
+const NAV = [
+  { to: "/command",       label: "Command"       },
+  { to: "/quote-builder", label: "Quote Builder" },
+  { to: "/fleet",         label: "Fleet"         },
+  { to: "/calendar",      label: "Calendar"      },
+  { to: "/assets",        label: "Assets"        },
+  { to: "/shows",         label: "Shows"         },
+  { to: "/permits",       label: "Permits"       },
+  { to: "/readiness",     label: "Readiness"     },
+  { to: "/utilization",   label: "Utilization"   },
+  { to: "/reports",       label: "Reports"       },
+];
+
+function NavLink({ to, label }: { to: string; label: string }) {
+  const loc     = useLocation();
+  const active  = loc.pathname === to || loc.pathname.startsWith(to + "/");
+  return (
+    <Link
+      to={to}
+      style={{
+        padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+        color: active ? "#4A9EFF" : "#8FA3C0",
+        background: active ? "rgba(74,158,255,0.12)" : "transparent",
+        textDecoration: "none", transition: "background 0.15s, color 0.15s",
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(74,158,255,0.08)";
+          (e.currentTarget as HTMLAnchorElement).style.color = "#4A9EFF";
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+          (e.currentTarget as HTMLAnchorElement).style.color = "#8FA3C0";
+        }
+      }}
+    >{label}</Link>
+  );
+}
 
 export default function App() {
   return (
@@ -30,54 +72,30 @@ export default function App() {
             DRONES CALC
           </span>
         </div>
-
-        <nav style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          {[
-            { to: "/command",       label: "Command"       },
-            { to: "/quote-builder", label: "Quote Builder" },
-            { to: "/fleet",         label: "Fleet"         },
-            { to: "/calendar",      label: "Calendar"      },
-            { to: "/reports",       label: "Reports"       },
-            { to: "/assets",        label: "🔒 Assets"     },
-            { to: "/shows",         label: "📅 Shows"      },
-            { to: "/permits",       label: "📋 Permits"    },
-            { to: "/readiness",     label: "🎯 Readiness"  },
-          ].map(({ to, label }) => (
-            <Link key={to} to={to} style={{
-              padding: "6px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-              color: "#8FA3C0", textDecoration: "none", transition: "background 0.15s, color 0.15s",
-            }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = "rgba(74,158,255,0.12)";
-                (e.currentTarget as HTMLAnchorElement).style.color = "#4A9EFF";
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-                (e.currentTarget as HTMLAnchorElement).style.color = "#8FA3C0";
-              }}
-            >{label}</Link>
-          ))}
+        <nav style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+          {NAV.map(n => <NavLink key={n.to} to={n.to} label={n.label} />)}
         </nav>
       </header>
 
       <main style={{ padding: "24px 28px" }}>
-        <React.Suspense fallback={<div style={{ padding: 16 }}>Loading...</div>}>
+        <React.Suspense fallback={<div style={{ padding: 16, opacity: 0.6 }}>Loading...</div>}>
           <Routes>
-            <Route path="/"             element={<Navigate to="/command" replace />} />
-            <Route path="/command"      element={<Command />} />
+            <Route path="/"              element={<Navigate to="/command" replace />} />
+            <Route path="/command"       element={<Command />} />
             <Route path="/quote-builder" element={<QuoteCalc />} />
-            <Route path="/quote-calc"   element={<Navigate to="/quote-builder" replace />} />
-            <Route path="/fleet"        element={<Fleet />} />
-            <Route path="/calendar"     element={<Calendar />} />
-            <Route path="/assets"       element={<Assets />} />`n            <Route path="/shows"        element={<Shows />} />
-            <Route path="/permits"      element={<Permits />} />
-            <Route path="/readiness"    element={<Readiness />} />
-            <Route path="/reports"      element={<Placeholder title="Reports" note="Placeholder route (OPS-ARCH later)." />} />
-            <Route path="*"             element={<Placeholder title="Not Found" note="Route does not exist." />} />
+            <Route path="/quote-calc"    element={<Navigate to="/quote-builder" replace />} />
+            <Route path="/fleet"         element={<Fleet />} />
+            <Route path="/calendar"      element={<Calendar />} />
+            <Route path="/assets"        element={<Assets />} />
+            <Route path="/shows"         element={<Shows />} />
+            <Route path="/permits"       element={<Permits />} />
+            <Route path="/readiness"     element={<Readiness />} />
+            <Route path="/utilization"   element={<Utilization />} />
+            <Route path="/reports"       element={<Placeholder title="Reports" note="Module 8 coming next." />} />
+            <Route path="*"              element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>
         </React.Suspense>
       </main>
     </div>
   );
 }
-
