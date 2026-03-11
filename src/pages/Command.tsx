@@ -1,10 +1,10 @@
 ﻿import React from "react";
 import { normalizeUiText } from "../core/text/normalizeUiText";
-// Link import removed â€” unused in current Command view
+// Link import removed - unused in current Command view
 import CapacityRiskPanel from "./command/CapacityRiskPanel";
 import ActionPlanPanel from "./command/ActionPlanPanel";
 /** ----------------------------
- * Safe sorting: Status Ã¢â€ â€™ Severity Ã¢â€ â€™ Due (stable)
+ * Safe sorting: Status -> Severity -> Due (stable)
  * Module-scope helpers (must stay top-level)
  * ----------------------------- */
 type _SortRowLike = {
@@ -820,7 +820,7 @@ export default function Command() {
     setResult(null);
   }, []);
 
-  // Live fetch: shows + permits â†’ real permit readiness counts.
+  // Live fetch: shows + permits -> real permit readiness counts.
   // Runs on mount and refreshes every 60 seconds.
   // Falls back gracefully if server is offline.
   React.useEffect(() => {
@@ -831,7 +831,7 @@ export default function Command() {
         fetch("/api/maintenance/alerts").then(r => r.ok ? r.json() : null),
       ])
         .then(([showsData, permitsData, alertsData]: [any, any, any]) => {
-          // â”€â”€ Shows â†’ windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // -- Shows -> windows ----------------------------
           const showItems: any[] = Array.isArray(showsData?.items) ? showsData.items : [];
           const upcoming = showItems.filter((s: any) =>
             s.status !== "COMPLETED" && s.status !== "CANCELLED"
@@ -843,7 +843,7 @@ export default function Command() {
             start:    String(s.date),
           }));
 
-          // â”€â”€ Permits â†’ readiness counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // -- Permits -> readiness counts ------------------
           const permitItems: any[] = Array.isArray(permitsData?.items) ? permitsData.items : [];
           const permitsTotal = permitItems.filter((p: any) =>
             p.status !== "EXPIRED" && p.status !== "REJECTED"
