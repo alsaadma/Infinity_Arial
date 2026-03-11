@@ -69,7 +69,7 @@ const DATASETS: { key: Dataset; label: string; icon: string }[] = [
   { key: 'batteries',   label: 'Battery Units',    icon: '' },
   { key: 'shows',       label: 'Show Events',      icon: '' },
   { key: 'maintenance', label: 'Maintenance Logs', icon: '' },
-  { key: 'permits',     label: 'Permits',          icon: 'ðŸ“‹' },
+  { key: 'permits',     label: 'Permits',          icon: '' },
   { key: 'readiness',   label: 'Readiness Items',  icon: '(ok)...' },
 ]
 
@@ -255,7 +255,7 @@ export default function Reporting() {
           accent="#4f87f5" note="Recent activity" />
       </div>
 
-      <SectionHeader title="Permits" icon="ðŸ“‹" />
+      <SectionHeader title="Permits" icon="" />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
         <KpiCard label="Expiring <=30 Days" value={kpi.permits.expiring_soon}
           accent={kpi.permits.expiring_soon > 0 ? '#f59e0b' : '#22c55e'}
