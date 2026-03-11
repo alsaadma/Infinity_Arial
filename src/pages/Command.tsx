@@ -1,10 +1,10 @@
-import React from "react";
+﻿import React from "react";
 import { normalizeUiText } from "../core/text/normalizeUiText";
-// Link import removed — unused in current Command view
+// Link import removed â€” unused in current Command view
 import CapacityRiskPanel from "./command/CapacityRiskPanel";
 import ActionPlanPanel from "./command/ActionPlanPanel";
 /** ----------------------------
- * Safe sorting: Status â†’ Severity â†’ Due (stable)
+ * Safe sorting: Status Ã¢â€ â€™ Severity Ã¢â€ â€™ Due (stable)
  * Module-scope helpers (must stay top-level)
  * ----------------------------- */
 type _SortRowLike = {
@@ -90,6 +90,7 @@ type CommandResult = {
   windows?: Array<{ id: string; label: string; required: number; start?: string; end?: string }>;
   actionPlan: ActionPlanRow[];
   notes?: string[];
+  maintenanceOverdue?: number;
 };
 
 const LS_KEY = "drones_calc.command.result.v1";
@@ -753,6 +754,11 @@ return (
               {result.summary.permitsReady}/{result.summary.permitsTotal}
             </b>
           </div>
+          {((result as any).maintenanceOverdue ?? 0) > 0 && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 12px", borderRadius: 8, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.40)", color: "#ef4444", fontSize: 13, fontWeight: 700, marginLeft: 8 }}>
+              ⚠ {(result as any).maintenanceOverdue} overdue service{(result as any).maintenanceOverdue !== 1 ? "s" : ""}
+            </div>
+          )}
 
       {/* DC_CAPRISK_PANEL_BEGIN */}
 <CapacityRiskPanel result={result} />
@@ -814,7 +820,7 @@ export default function Command() {
     setResult(null);
   }, []);
 
-  // Live fetch: shows + permits → real permit readiness counts.
+  // Live fetch: shows + permits â†’ real permit readiness counts.
   // Runs on mount and refreshes every 60 seconds.
   // Falls back gracefully if server is offline.
   React.useEffect(() => {
@@ -822,9 +828,10 @@ export default function Command() {
       Promise.all([
         fetch("/api/shows").then(r => r.ok ? r.json() : null),
         fetch("/api/permits").then(r => r.ok ? r.json() : null),
+        fetch("/api/maintenance/alerts").then(r => r.ok ? r.json() : null),
       ])
-        .then(([showsData, permitsData]: [any, any]) => {
-          // ── Shows → windows ────────────────────────────
+        .then(([showsData, permitsData, alertsData]: [any, any, any]) => {
+          // â”€â”€ Shows â†’ windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           const showItems: any[] = Array.isArray(showsData?.items) ? showsData.items : [];
           const upcoming = showItems.filter((s: any) =>
             s.status !== "COMPLETED" && s.status !== "CANCELLED"
@@ -836,7 +843,7 @@ export default function Command() {
             start:    String(s.date),
           }));
 
-          // ── Permits → readiness counts ──────────────────
+          // â”€â”€ Permits â†’ readiness counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           const permitItems: any[] = Array.isArray(permitsData?.items) ? permitsData.items : [];
           const permitsTotal = permitItems.filter((p: any) =>
             p.status !== "EXPIRED" && p.status !== "REJECTED"
@@ -845,6 +852,7 @@ export default function Command() {
             p.status === "APPROVED"
           ).length;
 
+          const overdueCount: number = (alertsData?.alerts ?? []).length;
           const synthetic: CommandResult = {
             updatedAt: new Date().toISOString(),
             summary: {
@@ -854,6 +862,7 @@ export default function Command() {
               permitsReady,
             },
             windows,
+            maintenanceOverdue: overdueCount,
             actionPlan: [],
             notes: upcoming.length > 0
               ? [`Live data \u2014 ${upcoming.length} show(s), ${permitsReady}/${permitsTotal} permits approved.`]
@@ -892,24 +901,4 @@ export default function Command() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
