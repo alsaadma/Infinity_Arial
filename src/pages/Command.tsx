@@ -814,54 +814,59 @@ export default function Command() {
     setResult(null);
   }, []);
 
-  // Live fetch: shows + permits on mount → real permit readiness counts.
-  // Falls back to manual seed if server is offline.
+  // Live fetch: shows + permits → real permit readiness counts.
+  // Runs on mount and refreshes every 60 seconds.
+  // Falls back gracefully if server is offline.
   React.useEffect(() => {
-    Promise.all([
-      fetch("/api/shows").then(r => r.ok ? r.json() : null),
-      fetch("/api/permits").then(r => r.ok ? r.json() : null),
-    ])
-      .then(([showsData, permitsData]: [any, any]) => {
-        // ── Shows → windows ──────────────────────────────
-        const showItems: any[] = Array.isArray(showsData?.items) ? showsData.items : [];
-        const upcoming = showItems.filter((s: any) =>
-          s.status !== "COMPLETED" && s.status !== "CANCELLED"
-        );
-        const windows = upcoming.map((s: any) => ({
-          id:       String(s.id),
-          label:    String(s.name) + (s.venue ? ` \u2014 ${s.venue}` : "") + ` (${s.date})`,
-          required: Number(s.drones_required) || 0,
-          start:    String(s.date),
-        }));
+    function fetchLiveData() {
+      Promise.all([
+        fetch("/api/shows").then(r => r.ok ? r.json() : null),
+        fetch("/api/permits").then(r => r.ok ? r.json() : null),
+      ])
+        .then(([showsData, permitsData]: [any, any]) => {
+          // ── Shows → windows ────────────────────────────
+          const showItems: any[] = Array.isArray(showsData?.items) ? showsData.items : [];
+          const upcoming = showItems.filter((s: any) =>
+            s.status !== "COMPLETED" && s.status !== "CANCELLED"
+          );
+          const windows = upcoming.map((s: any) => ({
+            id:       String(s.id),
+            label:    String(s.name) + (s.venue ? ` \u2014 ${s.venue}` : "") + ` (${s.date})`,
+            required: Number(s.drones_required) || 0,
+            start:    String(s.date),
+          }));
 
-        // ── Permits → readiness counts ───────────────────
-        // permitsTotal = all permits except EXPIRED and REJECTED (active pipeline)
-        // permitsReady = APPROVED only
-        const permitItems: any[] = Array.isArray(permitsData?.items) ? permitsData.items : [];
-        const permitsTotal = permitItems.filter((p: any) =>
-          p.status !== "EXPIRED" && p.status !== "REJECTED"
-        ).length;
-        const permitsReady = permitItems.filter((p: any) =>
-          p.status === "APPROVED"
-        ).length;
+          // ── Permits → readiness counts ──────────────────
+          const permitItems: any[] = Array.isArray(permitsData?.items) ? permitsData.items : [];
+          const permitsTotal = permitItems.filter((p: any) =>
+            p.status !== "EXPIRED" && p.status !== "REJECTED"
+          ).length;
+          const permitsReady = permitItems.filter((p: any) =>
+            p.status === "APPROVED"
+          ).length;
 
-        const synthetic: CommandResult = {
-          updatedAt: new Date().toISOString(),
-          summary: {
-            windows:        upcoming.length,
-            fleetAvailable: 0,   // overridden live by __liveFleet in ElseBranch
-            permitsTotal,
-            permitsReady,
-          },
-          windows,
-          actionPlan: [],
-          notes: upcoming.length > 0
-            ? [`Live data \u2014 ${upcoming.length} show(s), ${permitsReady}/${permitsTotal} permits approved.`]
-            : ["No upcoming shows found. Add shows via the Shows page."],
-        };
-        setResult(synthetic);
-      })
-      .catch(() => { /* server offline \u2014 user can seed manually */ });
+          const synthetic: CommandResult = {
+            updatedAt: new Date().toISOString(),
+            summary: {
+              windows:        upcoming.length,
+              fleetAvailable: 0,   // overridden live by __liveFleet in ElseBranch
+              permitsTotal,
+              permitsReady,
+            },
+            windows,
+            actionPlan: [],
+            notes: upcoming.length > 0
+              ? [`Live data \u2014 ${upcoming.length} show(s), ${permitsReady}/${permitsTotal} permits approved.`]
+              : ["No upcoming shows found. Add shows via the Shows page."],
+          };
+          setResult(synthetic);
+        })
+        .catch(() => { /* server offline \u2014 stored state retained */ });
+    }
+
+    fetchLiveData();                              // immediate on mount
+    const timer = setInterval(fetchLiveData, 60_000); // then every 60s
+    return () => clearInterval(timer);            // cleanup on unmount
   }, []);
 
   return (

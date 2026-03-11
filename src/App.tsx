@@ -8,6 +8,7 @@ const Calendar = React.lazy(() => import("./pages/Calendar"));
 const Assets   = React.lazy(() => import("./pages/Assets"));
 const Shows    = React.lazy(() => import("./pages/Shows"));
 const Permits  = React.lazy(() => import("./pages/Permits"));
+const Readiness = React.lazy(() => import("./pages/Readiness"));
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
             { to: "/assets",        label: "🔒 Assets"     },
             { to: "/shows",         label: "📅 Shows"      },
             { to: "/permits",       label: "📋 Permits"    },
+            { to: "/readiness",     label: "🎯 Readiness"  },
           ].map(({ to, label }) => (
             <Link key={to} to={to} style={{
               padding: "6px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500,
@@ -69,6 +71,7 @@ export default function App() {
             <Route path="/calendar"     element={<Calendar />} />
             <Route path="/assets"       element={<Assets />} />`n            <Route path="/shows"        element={<Shows />} />
             <Route path="/permits"      element={<Permits />} />
+            <Route path="/readiness"    element={<Readiness />} />
             <Route path="/reports"      element={<Placeholder title="Reports" note="Placeholder route (OPS-ARCH later)." />} />
             <Route path="*"             element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>

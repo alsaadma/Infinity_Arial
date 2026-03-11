@@ -19,6 +19,7 @@ const dronesRoutes    = require("./routes/drones.cjs");
 const batteriesRoutes = require("./routes/batteries.cjs");
 const showsRoutes     = require("./routes/shows.cjs");
 const permitsRoutes   = require("./routes/permits.cjs");
+const readinessRoutes = require("./routes/readiness.cjs");
 const authRoutes      = require("./routes/auth.cjs");
 
 const app     = Fastify({ logger: false });
@@ -83,6 +84,7 @@ async function main() {
   app.register(batteriesRoutes);
   app.register(showsRoutes);
   app.register(permitsRoutes);
+  app.register(readinessRoutes);
   app.register(authRoutes);
 
   await app.listen({ host, port });
