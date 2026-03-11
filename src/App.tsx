@@ -1,7 +1,9 @@
-import React from "react";
+﻿import React from "react";
 import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import Placeholder from "./pages/Placeholder";
 import Utilization from "./pages/Utilization";
+const Reporting   = React.lazy(() => import("./pages/Reporting"));
+const Maintenance = React.lazy(() => import("./pages/Maintenance"));
 const Command    = React.lazy(() => import("./pages/Command"));
 const QuoteCalc  = React.lazy(() => import("./pages/QuoteCalc"));
 const Fleet      = React.lazy(() => import("./pages/Fleet"));
@@ -22,6 +24,7 @@ const NAV = [
   { to: "/readiness",     label: "Readiness"     },
   { to: "/utilization",   label: "Utilization"   },
   { to: "/reports",       label: "Reports"       },
+  { to: "/maintenance",  label: "Maintenance"  },
 ];
 
 function NavLink({ to, label }: { to: string; label: string }) {
@@ -91,7 +94,8 @@ export default function App() {
             <Route path="/permits"       element={<Permits />} />
             <Route path="/readiness"     element={<Readiness />} />
             <Route path="/utilization"   element={<Utilization />} />
-            <Route path="/reports"       element={<Placeholder title="Reports" note="Module 8 coming next." />} />
+            <Route path="/reports"       element={<Reporting />} />
+            <Route path="/maintenance"   element={<Maintenance />} />
             <Route path="*"              element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>
         </React.Suspense>

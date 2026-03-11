@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Drones Calc - Local Backend (Level 3)
  * Fastify + SQLite (better-sqlite3)
  */
@@ -90,6 +90,8 @@ async function main() {
   app.register(authRoutes);
   app.register(costingRoutes);
   app.register(utilizationRoutes);
+  app.register(require('./routes/reporting.cjs'));
+  app.register(require('./routes/maintenance-schedule.cjs'));
 
   await app.listen({ host, port });
   console.log(`DC backend listening on http://${host}:${port}`);
@@ -99,5 +101,6 @@ main().catch((err) => {
   console.error("DC backend failed to start:", err);
   process.exit(1);
 });
+
 
 
