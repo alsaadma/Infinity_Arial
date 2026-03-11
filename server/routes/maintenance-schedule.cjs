@@ -155,6 +155,29 @@ module.exports = async function (app) {
     } finally { db.close(); }
   });
 
+  // ── GET /api/maintenance/history ────────────────────────────────────────
+  app.get('/api/maintenance/history', async (_req, reply) => {
+    const db = openDb();
+    try {
+      const rows = db.prepare(`
+        SELECT ml.*,
+               CASE
+                 WHEN ml.asset_type = 'DRONE'   THEN du.serial_number
+                 WHEN ml.asset_type = 'BATTERY' THEN bu.serial_number
+               END AS asset_serial
+        FROM   maintenance_log ml
+        LEFT JOIN drone_unit   du ON ml.asset_type = 'DRONE'   AND ml.asset_id = du.id
+        LEFT JOIN battery_unit bu ON ml.asset_type = 'BATTERY' AND ml.asset_id = bu.id
+        WHERE  ml.status = 'COMPLETED'
+        ORDER  BY ml.event_date DESC
+      `).all();
+
+      const totalCost = rows.reduce((sum, r) => sum + (Number(r.cost_sar) || 0), 0);
+
+      return reply.send({ entries: rows, total_cost_sar: totalCost });
+    } finally { db.close(); }
+  });
+
   // ── DELETE /api/maintenance/schedule/:id ────────────────────────────────
   app.delete('/api/maintenance/schedule/:id', async (req, reply) => {
     const { id } = req.params;
@@ -165,6 +188,7 @@ module.exports = async function (app) {
     } finally { db.close(); }
   });
 };
+
 
 
 

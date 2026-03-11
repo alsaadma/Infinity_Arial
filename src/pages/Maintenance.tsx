@@ -68,15 +68,15 @@ export default function Maintenance() {
       const [aRes, sRes, dRes, bRes] = await Promise.all([
         fetch("/api/maintenance/alerts"),
         fetch("/api/maintenance/upcoming"),
-        fetch("/api/fleet/drones"),
-        fetch("/api/fleet/batteries"),
+        fetch("/api/drones"),
+        fetch("/api/batteries"),
       ]);
       const aData = await aRes.json();
       setAlerts(aData.alerts ?? []);
       setUpcomingShows(aData.upcoming_shows ?? []);
       setSchedule(await sRes.json());
-      const dData = await dRes.json(); setDrones(dData.items ?? dData);
-      const bData = await bRes.json(); setBatteries(bData.items ?? bData);
+      setDrones(await dRes.json());
+      setBatteries(await bRes.json());
     } finally { setLoading(false); }
   };
 
@@ -377,4 +377,3 @@ export default function Maintenance() {
     </div>
   );
 }
-
