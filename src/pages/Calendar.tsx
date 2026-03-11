@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useAssetAuth } from "../hooks/useAssetAuth";
 
 interface ShowEvent {
   id: number;
@@ -20,6 +21,7 @@ const STATUS_COLOR: Record<string, string> = {
 const EMPTY = { name: "", date: "", venue: "", drones_required: "", status: "planned", notes: "" };
 
 export default function Calendar() {
+  const { session } = useAssetAuth();
   const [shows,   setShows]   = useState<ShowEvent[]>([]);
   const [form,    setForm]    = useState({ ...EMPTY });
   const [adding,  setAdding]  = useState(false);
@@ -41,7 +43,7 @@ export default function Calendar() {
     setError("");
     const res = await fetch("/api/shows", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + (session?.token ?? "") },
       body: JSON.stringify({ ...form, drones_required: Number(form.drones_required) }),
     });
     if (res.ok) { setForm({ ...EMPTY }); setAdding(false); fetchShows(); }
@@ -187,3 +189,4 @@ function ShowCard({ show }: { show: ShowEvent }) {
     </div>
   );
 }
+
