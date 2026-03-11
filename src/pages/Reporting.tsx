@@ -70,7 +70,7 @@ const DATASETS: { key: Dataset; label: string; icon: string }[] = [
   { key: 'shows',       label: 'Show Events',      icon: '' },
   { key: 'maintenance', label: 'Maintenance Logs', icon: '' },
   { key: 'permits',     label: 'Permits',          icon: 'ðŸ“‹' },
-  { key: 'readiness',   label: 'Readiness Items',  icon: 'âœ...' },
+  { key: 'readiness',   label: 'Readiness Items',  icon: '(ok)...' },
 ]
 
 function ExportPanel() {
@@ -206,6 +206,11 @@ export default function Reporting() {
         </button>
       </div>
 
+      <SectionHeader title="Data Export (CSV)" icon="" />
+      <p style={{ color: '#6b7fa3', fontSize: 13, marginBottom: 14 }}>
+        Download raw table data for offline analysis, audit, or reporting.
+      </p>
+      <ExportPanel />
       <SectionHeader title="Fleet Overview" icon="" />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
         <KpiCard label="Total Drones" value={kpi.fleet.total} accent="#4f87f5" />
@@ -260,11 +265,7 @@ export default function Reporting() {
           note={kpi.permits.expired > 0 ? '(!) Renew immediately' : '(ok) All current'} />
       </div>
 
-      <SectionHeader title="Data Export (CSV)" icon="" />
-      <p style={{ color: '#6b7fa3', fontSize: 13, marginBottom: 14 }}>
-        Download raw table data for offline analysis, audit, or reporting.
-      </p>
-      <ExportPanel />
+
 
     </div>
   )
