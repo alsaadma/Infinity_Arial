@@ -15,6 +15,7 @@ const Sites      = React.lazy(() => import("./pages/Sites"));
 const Allocations = React.lazy(() => import("./pages/Allocations"));
 const Costing    = React.lazy(() => import("./pages/Costing"));
 const Readiness  = React.lazy(() => import("./pages/Readiness"));
+const Help       = React.lazy(() => import("./pages/Help"));
 
 const NAV = [
   { to: "/command",       label: "Command"       },
@@ -31,6 +32,7 @@ const NAV = [
   { to: "/utilization",   label: "Utilization"   },
   { to: "/reports",       label: "Reports"       },
   { to: "/maintenance",  label: "Maintenance"  },
+  { to: "/help",          label: "Info Center"  },
 ];
 
 const SIDEBAR_W = 200;
@@ -115,7 +117,8 @@ export default function App() {
             <Route path="/costing"     element={<Costing />} />
             <Route path="/readiness"     element={<Readiness />} />
             <Route path="/utilization"   element={<Utilization />} />
-            <Route path="/reports"       element={<Reporting />} />
+            <Route path="/help"         element={<React.Suspense fallback={null}><Help /></React.Suspense>} />
+          <Route path="/reports"       element={<Reporting />} />
             <Route path="/maintenance"   element={<Maintenance />} />
             <Route path="*"              element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>
