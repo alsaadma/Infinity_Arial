@@ -215,6 +215,212 @@ function ShowForm({ token, initial, onDone, onCancel }: {
   );
 }
 
+
+// ── Inter-Show Dependency Timeline ─────────────────────────────────────────
+const DEP_DEFAULTS = [
+  { key: "logistics", icon: "🚛", label: "Logistics",      hours: 24 },
+  { key: "battery",   icon: "🔋", label: "Battery Charge", hours: 6  },
+  { key: "crew",      icon: "👥", label: "Crew Rest",      hours: 12 },
+];
+
+function addHours(dateStr: string, endTime: string, hours: number): Date {
+  const base = new Date(dateStr + "T" + endTime + ":00");
+  return new Date(base.getTime() + hours * 3600 * 1000);
+}
+
+function fmtDt(d: Date): string {
+  return d.toLocaleDateString("en-GB", { weekday:"short", day:"2-digit", month:"short" })
+       + " " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+}
+
+function fmtDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate())
+       + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+function DependencyTimeline({ shows }: { shows: ShowEvent[] }) {
+  const eligible = shows.filter(s => s.status !== "CANCELLED");
+  const [showA,    setShowA]    = useState<string>("");
+  const [showB,    setShowB]    = useState<string>("");
+  const [endTime,  setEndTime]  = useState("22:00");
+  const [overrides, setOverrides] = useState<Record<string, { active: boolean; value: string }>>({});
+
+  const sA = eligible.find(s => s.id === showA) ?? null;
+  const sB = eligible.find(s => s.id === showB) ?? null;
+
+  function getOverride(key: string) {
+    return overrides[key] ?? { active: false, value: "" };
+  }
+  function setOverride(key: string, patch: Partial<{ active: boolean; value: string }>) {
+    setOverrides(prev => ({ ...prev, [key]: { ...getOverride(key), ...patch } }));
+  }
+
+  const depRows = DEP_DEFAULTS.map(dep => {
+    const auto = sA ? addHours(sA.date, endTime, dep.hours) : null;
+    const ov   = getOverride(dep.key);
+    const ready: Date | null = ov.active && ov.value
+      ? new Date(ov.value)
+      : auto;
+    return { ...dep, auto, ready };
+  });
+
+  const nextOk: Date | null = depRows.reduce<Date | null>((mx, r) => {
+    if (!r.ready) return mx;
+    return mx == null || r.ready > mx ? r.ready : mx;
+  }, null);
+
+  const bottleneck = nextOk
+    ? depRows.find(r => r.ready && r.ready.getTime() === nextOk!.getTime())?.label ?? ""
+    : "";
+
+  const showBDate = sB ? new Date(sB.date + "T00:00:00") : null;
+  const gapMs     = nextOk && showBDate ? showBDate.getTime() - nextOk.getTime() : null;
+  const gapHours  = gapMs != null ? Math.round(gapMs / 3600000) : null;
+  const gapOk     = gapHours != null && gapHours >= 0;
+
+  const selStyle: React.CSSProperties = {
+    background: "#1A2A44", border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 8, color: "#F0F4FF", padding: "9px 14px",
+    fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ background: "#111E35", border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 12, padding: "20px 24px", marginTop: 28 }}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ margin: "0 0 4px", color: "#F0F4FF", fontSize: 15, fontWeight: 600 }}>
+          Inter-Show Dependency Timeline
+        </h3>
+        <p style={{ margin: 0, color: "#8FA3C0", fontSize: 12 }}>
+          Calculate earliest possible start for the next show after dependencies are cleared.
+        </p>
+      </div>
+
+      {/* Show selectors + end time */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 140px", gap: 12, marginBottom: 20 }}>
+        <div>
+          <label style={{ color: "#8FA3C0", fontSize: 12, display: "block", marginBottom: 5 }}>
+            Show A (just completed)
+          </label>
+          <select value={showA} onChange={e => setShowA(e.target.value)} style={selStyle}>
+            <option value="">— select show —</option>
+            {eligible.map(s => (
+              <option key={s.id} value={s.id}>{s.date} · {s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ color: "#8FA3C0", fontSize: 12, display: "block", marginBottom: 5 }}>
+            Show B (next show)
+          </label>
+          <select value={showB} onChange={e => setShowB(e.target.value)} style={selStyle}>
+            <option value="">— select show —</option>
+            {eligible.filter(s => s.id !== showA).map(s => (
+              <option key={s.id} value={s.id}>{s.date} · {s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ color: "#8FA3C0", fontSize: 12, display: "block", marginBottom: 5 }}>
+            Show A End Time
+          </label>
+          <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+            style={selStyle} />
+        </div>
+      </div>
+
+      {/* Dependency rows */}
+      {sA ? (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+            {depRows.map(dep => {
+              const ov = getOverride(dep.key);
+              return (
+                <div key={dep.key} style={{
+                  background: "#0D1828", border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 10, padding: "12px 16px",
+                  display: "grid", gridTemplateColumns: "28px 140px 1fr auto", alignItems: "center", gap: 12,
+                }}>
+                  <span style={{ fontSize: 18 }}>{dep.icon}</span>
+                  <div>
+                    <div style={{ color: "#F0F4FF", fontSize: 13, fontWeight: 600 }}>{dep.label}</div>
+                    <div style={{ color: "#8FA3C0", fontSize: 11 }}>default {dep.hours}h after show end</div>
+                  </div>
+                  <div>
+                    {ov.active ? (
+                      <input type="datetime-local" value={ov.value}
+                        onChange={e => setOverride(dep.key, { value: e.target.value })}
+                        style={{ ...selStyle, width: "auto", fontSize: 13, padding: "5px 10px" }} />
+                    ) : (
+                      <span style={{ color: "#4A9EFF", fontSize: 13, fontWeight: 600 }}>
+                        {dep.auto ? "Ready by " + fmtDt(dep.auto) : "—"}
+                      </span>
+                    )}
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6,
+                                   color: "#8FA3C0", fontSize: 12, cursor: "pointer",
+                                   whiteSpace: "nowrap" as const }}>
+                    <input type="checkbox" checked={ov.active}
+                      onChange={e => {
+                        const active = e.target.checked;
+                        const val = dep.auto ? fmtDatetimeLocal(dep.auto) : "";
+                        setOverride(dep.key, { active, value: ov.value || val });
+                      }} />
+                    Override
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Next OK result */}
+          {nextOk && (
+            <div style={{ background: "#0D1828", borderRadius: 10,
+                          border: "1px solid rgba(74,158,255,0.25)", padding: "16px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                            flexWrap: "wrap" as const, gap: 12 }}>
+                <div>
+                  <div style={{ color: "#8FA3C0", fontSize: 11, textTransform: "uppercase",
+                                letterSpacing: 0.5, marginBottom: 6 }}>
+                    Next OK Calculation · Earliest Possible Start
+                  </div>
+                  <div style={{ color: "#4A9EFF", fontSize: 22, fontWeight: 700 }}>
+                    {fmtDt(nextOk)}
+                  </div>
+                  <div style={{ color: "#8FA3C0", fontSize: 12, marginTop: 4 }}>
+                    Bottleneck: <span style={{ color: "#F0F4FF" }}>{bottleneck}</span>
+                  </div>
+                </div>
+                {sB && gapHours != null && (
+                  <div style={{ textAlign: "right" as const }}>
+                    <div style={{ color: "#8FA3C0", fontSize: 11, textTransform: "uppercase",
+                                  letterSpacing: 0.5, marginBottom: 6 }}>
+                      Gap to Show B
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 700,
+                                  color: gapOk ? "#43A047" : "#E53935" }}>
+                      {gapOk ? "+" : ""}{gapHours}h
+                    </div>
+                    <div style={{ fontSize: 12, color: gapOk ? "#43A047" : "#E53935",
+                                  marginTop: 4, fontWeight: 600 }}>
+                      {gapOk ? "✓ Schedule is feasible" : "✗ Insufficient gap — reschedule Show B"}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <p style={{ color: "#8FA3C0", fontSize: 13, margin: 0 }}>
+          Select Show A to calculate dependency ready times.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ShowsPanel({ session, onLogout }: { session: AssetSession; onLogout: () => void }) {
   const [shows,    setShows]   = useState<ShowEvent[]>([]);
   const [summary,  setSummary] = useState<any>(null);
@@ -385,6 +591,7 @@ function ShowsPanel({ session, onLogout }: { session: AssetSession; onLogout: ()
           <p style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{shows.length} show(s)</p>
         </div>
       )}
+      <DependencyTimeline shows={shows} />
     </div>
   );
 }
