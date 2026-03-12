@@ -24,6 +24,7 @@ interface BatteryUnit {
   cycle_max: number;
   health_pct: number;
   status: string;
+  purchase_price_sar: number | null;
   created_at: string;
 }
 
@@ -226,6 +227,7 @@ function BatteriesTab() {
   const [type, setType]           = useState<BatteryType>("TRAY");
   const [droneId, setDroneId]     = useState("");
   const [cycleMax, setCycleMax]   = useState("300");
+  const [batPrice, setBatPrice]   = useState("");
   const [adding, setAdding]       = useState(false);
 
   async function load() {
@@ -245,13 +247,14 @@ function BatteriesTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          serial_number: serial.trim() || null,
-          battery_type:  type,
-          drone_id:      droneId.trim() || null,
-          cycle_max:     Number(cycleMax) || 300,
+          serial_number:      serial.trim() || null,
+          battery_type:       type,
+          drone_id:           droneId.trim() || null,
+          cycle_max:          Number(cycleMax) || 300,
+          purchase_price_sar: batPrice !== "" ? parseFloat(batPrice) : null,
         }),
       });
-      setSerial(""); setDroneId(""); setCycleMax("300"); setType("TRAY");
+      setSerial(""); setDroneId(""); setCycleMax("300"); setType("TRAY"); setBatPrice("");
       await load();
     } catch { setError("Failed to add battery."); }
     finally { setAdding(false); }
@@ -297,6 +300,11 @@ function BatteriesTab() {
           <label style={{ fontSize: 16, opacity: 0.6 }}>Max Cycles</label>
           <input value={cycleMax} onChange={e => setCycleMax(e.target.value)}
             type="number" style={{ ...inputStyle, width: 80 }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 16, opacity: 0.6 }}>Price (SAR)</label>
+          <input value={batPrice} onChange={e => setBatPrice(e.target.value)}
+            placeholder="320" type="number" min="0" style={{ ...inputStyle, width: 100 }} />
         </div>
         <button onClick={addBattery} disabled={adding} style={btnStyle}>
           {adding ? "Adding…" : "+ Add Battery"}

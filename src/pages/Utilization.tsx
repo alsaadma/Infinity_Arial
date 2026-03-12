@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 
 type UtilSummary = {
   computed_at: string;
@@ -58,26 +58,26 @@ export default function Utilization() {
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
       <h2 style={{ margin: "0 0 4px", fontWeight: 900, fontSize: 22 }}>Utilization &amp; Capacity Planning</h2>
-      <p style={{ margin: "0 0 24px", opacity: 0.55, fontSize: 13 }}>Module 7 Ãƒâ€šÃ‚Â- Fleet load, battery stress, monthly demand heatmap</p>
+      <p style={{ margin: "0 0 24px", opacity: 0.55, fontSize: 13 }}>Module 7 - Fleet load, battery stress, monthly demand heatmap</p>
 
-      {loading && <p style={{ opacity: 0.6 }}>LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</p>}
+      {loading && <p style={{ opacity: 0.6 }}>Loading...</p>}
       {error && <div style={{ background: "rgba(255,60,60,0.12)", border: "1px solid rgba(255,60,60,0.35)", borderRadius: 8, padding: "12px 16px", color: "#ff7b7b", fontSize: 13 }}>{error}</div>}
 
       {s && (
         <>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 28 }}>
             <KpiCard label="Fleet Utilization"  value={s.utilization.drone_utilization_pct} unit="%" sub={s.shows.total_drones_needed + " needed / " + s.fleet.active + " active"} warn={s.utilization.drone_utilization_pct > 90} />
-            <KpiCard label="Active Drones"      value={s.fleet.active}      sub={s.fleet.maintenance + " maintenance Ãƒâ€šÃ‚Â- " + s.fleet.retired + " retired"} color="#4caf82" />
+            <KpiCard label="Active Drones"      value={s.fleet.active}      sub={s.fleet.maintenance + " maintenance - " + s.fleet.retired + " retired"} color="#4caf82" />
             <KpiCard label="Idle Drones"         value={s.fleet.idle}        sub="Active not committed to upcoming shows" color="#7eb8f7" />
             <KpiCard label="Overbooked Shows"   value={s.shows.overbooked}  sub={"of " + s.shows.upcoming + " upcoming"} warn={s.shows.overbooked > 0} />
             {s.utilization.battery_stress_pct !== null && (
-              <KpiCard label="Avg Battery Stress" value={s.utilization.battery_stress_pct ?? "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"} unit="%" sub={s.utilization.critical_batteries + " batteries ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â¥80% life used"} warn={(s.utilization.battery_stress_pct ?? 0) > 70} />
+              <KpiCard label="Avg Battery Stress" value={s.utilization.battery_stress_pct ?? "—"} unit="%" sub={s.utilization.critical_batteries + " batteries >=80% life used"} warn={(s.utilization.battery_stress_pct ?? 0) > 70} />
             )}
           </div>
 
           {(!s.schema_coverage.show_demand || !s.schema_coverage.battery_cycles) && (
             <div style={{ background: "rgba(240,165,0,0.08)", border: "1px solid rgba(240,165,0,0.30)", borderRadius: 8, padding: "10px 14px", fontSize: 12, marginBottom: 20 }}>
-              ÃƒÂ¢Ã…Â¡Ã‚Â  Partial data:{" "}
+              ⚠️  Partial data:{" "}
               {!s.schema_coverage.show_demand    && "show_event.drones_required not found. "}
               {!s.schema_coverage.battery_cycles && "battery_unit.cycle_count/max_cycles not found."}
             </div>
@@ -140,7 +140,7 @@ export default function Utilization() {
             </table>
           )}
           <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>
-            Computed: {summary?.computed_at ? new Date(summary.computed_at).toLocaleString() : "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"}
+            Computed: {summary?.computed_at ? new Date(summary.computed_at).toLocaleString() : "—"}
           </div>
         </div>
       )}

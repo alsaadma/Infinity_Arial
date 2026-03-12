@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useAssetAuth, type AssetSession } from "../hooks/useAssetAuth";
 
 const API = "";
@@ -20,7 +20,7 @@ interface BatteryUnit {
   id: string; serial_number: string | null; battery_type: BatteryType;
   cycle_count: number; cycle_max: number; health_pct: number;
   capacity_mah: number | null; voltage_nominal: number | null;
-  status: BatteryStatus; created_at: string;
+  drone_id: string | null; status: BatteryStatus; created_at: string;
 }
 interface BatteryLog {
   id: string; from_status: string | null; to_status: string;
@@ -295,6 +295,7 @@ function BatteriesPanel({ token }: { token: string }) {
   const [err,      setErr]      = useState("");
   const [logOpen,  setLogOpen]  = useState<Record<string, boolean>>({});
   const [logData,  setLogData]  = useState<Record<string, BatteryLog[]>>({});
+  const [drones,   setDrones]   = useState<DroneUnit[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -305,7 +306,21 @@ function BatteriesPanel({ token }: { token: string }) {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    fetch(`${API}/api/fleet/drones`).then(r => r.json()).then(d => setDrones(d.items ?? []));
+  }, [load]);
+
+  async function assignDrone(batteryId: string, droneId: string | null, token: string) {
+    const r = await fetch(`${API}/api/fleet/batteries/${batteryId}/drone`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ drone_id: droneId }),
+    });
+    const d = await r.json();
+    if (!d.ok) window.alert(d.error ?? "Failed to assign drone");
+    else load();
+  }
 
   async function addBattery() {
     setBusy(true); setErr("");
@@ -408,7 +423,7 @@ function BatteriesPanel({ token }: { token: string }) {
         <div style={{ overflowX: "auto" as const }}>
           <table style={tbl}>
             <thead><tr>
-              {["Serial", "Type", "Capacity", "Voltage", "Status", "Health", "Cycles", "Registered", "Actions"].map(h =>
+              {["Serial", "Type", "Capacity", "Voltage", "Drone", "Status", "Health", "Cycles", "Registered", "Actions"].map(h =>
                 <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -425,6 +440,21 @@ function BatteriesPanel({ token }: { token: string }) {
                     </td>
                     <td style={{ ...td, color: MUTED, fontSize: 12 }}>
                       {b.voltage_nominal != null ? `${b.voltage_nominal} V` : "—"}
+                    </td>
+                    <td style={td}>
+                      <select
+                        value={b.drone_id ?? ""}
+                        onChange={e => assignDrone(b.id, e.target.value || null, token)}
+                        style={{ background: "#1A2A44", border: `1px solid ${BDR}`, borderRadius: 6,
+                                 color: b.drone_id ? ACCENT : MUTED,
+                                 padding: "4px 8px", fontSize: 12, maxWidth: 140 }}>
+                        <option value="">— unassigned —</option>
+                        {drones.map(d => (
+                          <option key={d.id} value={d.id}>
+                            {d.serial_number ?? d.id.slice(0, 8)}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td style={td}>
                       <select
@@ -463,7 +493,7 @@ function BatteriesPanel({ token }: { token: string }) {
                   </tr>
                   {logOpen[b.id] && (
                     <tr key={`${b.id}-log`} style={{ borderBottom: `1px solid ${BDR}` }}>
-                      <td colSpan={9} style={{ ...td, background: "rgba(0,0,0,0.15)", paddingTop: 6, paddingBottom: 10 }}>
+                      <td colSpan={10} style={{ ...td, background: "rgba(0,0,0,0.15)", paddingTop: 6, paddingBottom: 10 }}>
                         {(logData[b.id] ?? []).length === 0
                           ? <span style={{ color: MUTED, fontSize: 12 }}>No status changes recorded yet.</span>
                           : <table style={{ ...tbl, fontSize: 12, marginTop: 4 }}>

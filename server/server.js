@@ -19,6 +19,8 @@ const dronesRoutes    = require("./routes/drones.cjs");
 const batteriesRoutes = require("./routes/batteries.cjs");
 const showsRoutes     = require("./routes/shows.cjs");
 const permitsRoutes   = require("./routes/permits.cjs");
+const sitesRoutes     = require("./routes/sites.cjs");
+const allocationsRoutes = require("./routes/allocations.cjs");
 const readinessRoutes = require("./routes/readiness.cjs");
 const authRoutes      = require("./routes/auth.cjs");
 const costingRoutes   = require("./routes/costing.cjs");
@@ -86,6 +88,8 @@ async function main() {
   app.register(batteriesRoutes);
   app.register(showsRoutes);
   app.register(permitsRoutes);
+  app.register(sitesRoutes);
+  app.register(allocationsRoutes);
   app.register(readinessRoutes);
   app.register(authRoutes);
   app.register(costingRoutes);

@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /**
  * Drones Calc - Module 2: Asset Registry (Drones)
  * GET  is open   - Command dashboard reads fleet counts without auth
@@ -53,10 +53,10 @@ module.exports = async function dronesRoutes(fastify) {
   const db = openDb();
 
   const selAll = db.prepare(
-    "SELECT id, serial_number, model_id, status, status_reason, updated_by_user_id, created_at, updated_at FROM drone_unit ORDER BY created_at DESC"
+    "SELECT id, serial_number, model_id, status, status_reason, updated_by_user_id, purchase_price_sar, created_at, updated_at FROM drone_unit ORDER BY created_at DESC"
   );
   const insert = db.prepare(
-    "INSERT INTO drone_unit (id, serial_number, model_id, status) VALUES (@id, @serial_number, @model_id, @status)"
+    "INSERT INTO drone_unit (id, serial_number, model_id, status, purchase_price_sar) VALUES (@id, @serial_number, @model_id, @status, @purchase_price_sar)"
   );
   const patchStatus = db.prepare(`
     UPDATE drone_unit
@@ -64,6 +64,9 @@ module.exports = async function dronesRoutes(fastify) {
         updated_by_user_id = @updated_by, updated_at = datetime('now')
     WHERE id = @id
   `);
+  const patchPrice = db.prepare(
+    "UPDATE drone_unit SET purchase_price_sar = @price, updated_at = datetime('now') WHERE id = @id"
+  );
 
   fastify.get("/api/fleet/drones", async function () {
     return { ok: true, items: selAll.all() };
@@ -78,8 +81,11 @@ module.exports = async function dronesRoutes(fastify) {
     if (!VALID_STATUS.includes(status))
       return reply.code(400).send({ ok: false, error: "invalid status" });
 
+    const priceRaw = (body.purchase_price_sar !== undefined && body.purchase_price_sar !== null && body.purchase_price_sar !== "")
+      ? parseFloat(body.purchase_price_sar) : null;
+    const purchase_price_sar = (priceRaw !== null && !isNaN(priceRaw) && priceRaw >= 0) ? priceRaw : null;
     const id = crypto.randomUUID();
-    insert.run({ id, serial_number: serial, model_id: model, status });
+    insert.run({ id, serial_number: serial, model_id: model, status, purchase_price_sar });
     return reply.code(201).send({ ok: true, id });
   });
 
@@ -99,7 +105,7 @@ module.exports = async function dronesRoutes(fastify) {
     "SELECT id, from_status, to_status, reason, changed_by, changed_at FROM drone_status_log WHERE drone_id = ? ORDER BY changed_at DESC LIMIT 50"
   );
 
-  // RETIRED is a terminal state — no transitions out
+  // RETIRED is a terminal state â€” no transitions out
   function validateTransition(from, to) {
     if (from === to) return null;
     if (from === "RETIRED") return "RETIRED drones cannot be transitioned to another status.";
@@ -136,9 +142,25 @@ module.exports = async function dronesRoutes(fastify) {
     return { ok: true, from_status: existing.status, to_status: status };
   });
 
+  fastify.patch("/api/fleet/drones/:id/price", { preHandler: requireAuth }, async function (req, reply) {
+    const id      = String(req.params.id || "").trim();
+    const body    = req.body && typeof req.body === "object" ? req.body : {};
+    const priceRaw = body.purchase_price_sar;
+    if (!id) return reply.code(400).send({ ok: false, error: "id required" });
+    const existing = db.prepare("SELECT id FROM drone_unit WHERE id = ?").get(id);
+    if (!existing) return reply.code(404).send({ ok: false, error: "drone not found" });
+    const price = (priceRaw !== undefined && priceRaw !== null && priceRaw !== "")
+      ? parseFloat(priceRaw) : null;
+    if (price !== null && (isNaN(price) || price < 0))
+      return reply.code(400).send({ ok: false, error: "purchase_price_sar must be >= 0" });
+    patchPrice.run({ id, price });
+    return { ok: true, id, purchase_price_sar: price };
+  });
+
   fastify.get("/api/fleet/drones/:id/log", async function (req, reply) {
     const id = String(req.params.id || "").trim();
     if (!id) return reply.code(400).send({ ok: false, error: "id required" });
     return { ok: true, items: selLog.all(id) };
   });
 };
+

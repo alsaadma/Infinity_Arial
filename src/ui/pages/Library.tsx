@@ -33,7 +33,8 @@ export default function Library() {
   }
 
   useEffect(() => {
-    refresh();
+    const t = setTimeout(() => refresh(), 0);
+    return () => clearTimeout(t);
   }, []);
 
   return (
@@ -75,3 +76,4 @@ export default function Library() {
     </Stack>
   );
 }
+

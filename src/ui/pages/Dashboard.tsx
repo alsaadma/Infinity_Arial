@@ -22,7 +22,8 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    refresh();
+    const t = setTimeout(() => refresh(), 0);
+    return () => clearTimeout(t);
   }, []);
 
   return (

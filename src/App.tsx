@@ -11,6 +11,8 @@ const Calendar   = React.lazy(() => import("./pages/Calendar"));
 const Assets     = React.lazy(() => import("./pages/Assets"));
 const Shows      = React.lazy(() => import("./pages/Shows"));
 const Permits    = React.lazy(() => import("./pages/Permits"));
+const Sites      = React.lazy(() => import("./pages/Sites"));
+const Allocations = React.lazy(() => import("./pages/Allocations"));
 const Readiness  = React.lazy(() => import("./pages/Readiness"));
 
 const NAV = [
@@ -21,6 +23,8 @@ const NAV = [
   { to: "/assets",        label: "Assets"        },
   { to: "/shows",         label: "Shows"         },
   { to: "/permits",       label: "Permits"       },
+  { to: "/sites",         label: "Sites"         },
+  { to: "/allocations",   label: "Allocations"   },
   { to: "/readiness",     label: "Readiness"     },
   { to: "/utilization",   label: "Utilization"   },
   { to: "/reports",       label: "Reports"       },
@@ -92,6 +96,8 @@ export default function App() {
             <Route path="/assets"        element={<Assets />} />
             <Route path="/shows"         element={<Shows />} />
             <Route path="/permits"       element={<Permits />} />
+            <Route path="/sites"         element={<Sites />} />
+            <Route path="/allocations" element={<Allocations />} />
             <Route path="/readiness"     element={<Readiness />} />
             <Route path="/utilization"   element={<Utilization />} />
             <Route path="/reports"       element={<Reporting />} />

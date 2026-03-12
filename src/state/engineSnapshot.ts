@@ -16,7 +16,7 @@ function __writeSnapshotToStorage<T>(snap: T | null) {
     if (typeof window === "undefined") return;
     if (!snap) window.localStorage.removeItem(SNAPSHOT_KEY);
     else window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap));
-  } catch {}
+  } catch { /* intentionally ignored (best-effort local snapshot) */ }
 }
 
 /**
@@ -79,3 +79,4 @@ function subscribe(listener: Listener) {
 export function useEngineSnapshot(): EngineSnapshot | null {
   return useSyncExternalStore(subscribe, getEngineSnapshot, getEngineSnapshot);
 }
+

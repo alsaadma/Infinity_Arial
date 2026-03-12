@@ -19,7 +19,7 @@ function Badge({ tone, children }: { tone: "green" | "amber" | "red" | "slate"; 
 }
 
 export default function QuoteCalcPage() {
-  const [fleet, setFleet] = useState<FleetBaseline>({
+  const [fleet] = useState<FleetBaseline>({
     fleet_size: 1000,
     capex_sar: 3991657,
     useful_life_years: 3,
@@ -90,7 +90,7 @@ export default function QuoteCalcPage() {
           <label className="text-xs text-slate-600">Risk level</label>
           <select className="mt-1 w-full rounded-lg border px-3 py-2"
             value={input.requirements.risk_level}
-            onChange={(e) => setInput({ ...input, requirements: { ...input.requirements, risk_level: e.target.value as any } })}
+            onChange={(e) => setInput({ ...input, requirements: { ...input.requirements, risk_level: e.target.value as unknown } })}
           >
             <option value="LOW">LOW</option>
             <option value="MED">MED</option>
@@ -175,3 +175,4 @@ export default function QuoteCalcPage() {
     </div>
   );
 }
+

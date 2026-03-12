@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useAssetAuth, type AssetSession } from "../hooks/useAssetAuth";
 
 type PermitStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "EXPIRED";
@@ -258,6 +258,15 @@ function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: 
   const approved      = permits.filter(p => p.status === "APPROVED").length;
   const pending       = permits.filter(p => p.status === "SUBMITTED").length;
   const draft         = permits.filter(p => p.status === "DRAFT").length;
+  const now            = new Date();
+  const in30           = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const expiringSoon   = permits.filter(p =>
+    p.expires_at && p.status === "APPROVED" &&
+    new Date(p.expires_at) > now && new Date(p.expires_at) <= in30
+  ).length;
+  const expiredCount   = permits.filter(p =>
+    p.expires_at && new Date(p.expires_at) < now
+  ).length;
 
   return (
     <div>
@@ -286,6 +295,8 @@ function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: 
           { label: "Approved",      value: approved,     color: GREEN  },
           { label: "Submitted",     value: pending,      color: ACCENT },
           { label: "Draft",         value: draft,        color: MUTED  },
+          { label: "Expiring \u226430d", value: expiringSoon, color: ORANGE },
+          { label: "Expired",        value: expiredCount, color: RED   },
         ].map(k => (
           <div key={k.label} style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12,
                         padding: "16px 22px", flex: 1, minWidth: 120 }}>
@@ -336,8 +347,17 @@ function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: 
                 <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {filtered.map(p => (
-                <tr key={p.id} style={{ borderBottom: `1px solid ${BDR}` }}>
+              {filtered.map(p => {
+                const isExpired  = !!(p.expires_at && new Date(p.expires_at) < now);
+                const isExpiring = !!(p.expires_at && p.status === "APPROVED" &&
+                  new Date(p.expires_at) > now && new Date(p.expires_at) <= in30);
+                const rowStyle = isExpired
+                  ? { borderBottom: `1px solid ${BDR}`, borderLeft: "3px solid " + RED }
+                  : isExpiring
+                    ? { borderBottom: `1px solid ${BDR}`, borderLeft: "3px solid " + ORANGE }
+                    : { borderBottom: `1px solid ${BDR}` };
+                return (
+                <tr key={p.id} style={rowStyle}>
                   <td style={{ ...td, fontWeight: 600, whiteSpace: "nowrap" as const }}>
                     {showName(p.show_id)}
                   </td>
@@ -373,7 +393,8 @@ function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: 
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

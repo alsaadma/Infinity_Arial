@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /**
  * Drones Calc - Module 2: Asset Registry (Batteries)
  * GET  is open   - read from anywhere
@@ -66,7 +66,7 @@ function openDb() {
   return db;
 }
 
-// RETIRED is terminal — no transitions out
+// RETIRED is terminal â€” no transitions out
 function validateTransition(from, to) {
   if (from === to) return null;
   if (from === "RETIRED") return "RETIRED batteries cannot be transitioned to another status.";
@@ -79,22 +79,25 @@ module.exports = async function batteriesRoutes(fastify) {
   const selAll = db.prepare(`
     SELECT id, serial_number, battery_type, drone_id,
            cycle_count, cycle_max, health_pct, status,
-           capacity_mah, voltage_nominal, created_at, updated_at
+           capacity_mah, voltage_nominal, purchase_price_sar, created_at, updated_at
     FROM battery_unit ORDER BY battery_type, created_at DESC
   `);
   const insert = db.prepare(`
     INSERT INTO battery_unit
       (id, serial_number, battery_type, drone_id, cycle_count, cycle_max,
-       capacity_mah, voltage_nominal)
+       capacity_mah, voltage_nominal, purchase_price_sar)
     VALUES
       (@id, @serial_number, @battery_type, @drone_id, @cycle_count, @cycle_max,
-       @capacity_mah, @voltage_nominal)
+       @capacity_mah, @voltage_nominal, @purchase_price_sar)
   `);
   const patchStatus = db.prepare(`
     UPDATE battery_unit
     SET status = @status, updated_at = datetime('now')
     WHERE id = @id
   `);
+  const patchPrice = db.prepare(
+    "UPDATE battery_unit SET purchase_price_sar = @price, updated_at = datetime('now') WHERE id = @id"
+  );
   const insertLog = db.prepare(`
     INSERT INTO battery_status_log
       (id, battery_id, from_status, to_status, reason, changed_by)
@@ -106,12 +109,12 @@ module.exports = async function batteriesRoutes(fastify) {
     ORDER BY changed_at DESC LIMIT 50
   `);
 
-  // ── GET all ────────────────────────────────────────────
+  // â”€â”€ GET all â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fastify.get("/api/fleet/batteries", async function () {
     return { ok: true, items: selAll.all() };
   });
 
-  // ── POST create ────────────────────────────────────────
+  // â”€â”€ POST create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fastify.post("/api/fleet/batteries", { preHandler: requireAuth }, async function (req, reply) {
     const body    = req.body && typeof req.body === "object" ? req.body : {};
     const serial  = String(body.serial_number   || "").trim() || null;
@@ -125,14 +128,57 @@ module.exports = async function batteriesRoutes(fastify) {
     if (!VALID_TYPES.includes(type))
       return reply.code(400).send({ ok: false, error: "battery_type must be ON_DRONE|TRAY|STATION" });
 
+    const priceRaw = (body.purchase_price_sar !== undefined && body.purchase_price_sar !== null && body.purchase_price_sar !== "")
+      ? parseFloat(body.purchase_price_sar) : null;
+    const purchase_price_sar = (priceRaw !== null && !isNaN(priceRaw) && priceRaw >= 0) ? priceRaw : null;
     const id = crypto.randomUUID();
     insert.run({ id, serial_number: serial, battery_type: type, drone_id: drone,
                  cycle_count: cycles, cycle_max: maxC,
-                 capacity_mah: capMah, voltage_nominal: voltage });
+                 capacity_mah: capMah, voltage_nominal: voltage, purchase_price_sar });
     return reply.code(201).send({ ok: true, id });
   });
 
-  // ── PATCH status ───────────────────────────────────────
+  // -- PATCH drone assignment
+  fastify.patch("/api/fleet/batteries/:id/drone", { preHandler: requireAuth }, async function (req, reply) {
+    const id      = String(req.params.id || "").trim();
+    const body    = req.body && typeof req.body === "object" ? req.body : {};
+    const droneId = body.drone_id !== undefined
+      ? (String(body.drone_id || "").trim() || null)
+      : undefined;
+
+    if (!id) return reply.code(400).send({ ok: false, error: "id required" });
+    const existing = db.prepare("SELECT id FROM battery_unit WHERE id = ?").get(id);
+    if (!existing) return reply.code(404).send({ ok: false, error: "battery not found" });
+
+    // If assigning (not clearing), verify the drone exists
+    if (droneId) {
+      const drone = db.prepare("SELECT id FROM drone_unit WHERE id = ?").get(droneId);
+      if (!drone) return reply.code(404).send({ ok: false, error: "drone not found" });
+    }
+
+    db.prepare("UPDATE battery_unit SET drone_id = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(droneId ?? null, id);
+    return { ok: true, id, drone_id: droneId ?? null };
+  });
+
+  // -- PATCH price
+  fastify.patch("/api/fleet/batteries/:id/price", { preHandler: requireAuth }, async function (req, reply) {
+    const id       = String(req.params.id || "").trim();
+    const body     = req.body && typeof req.body === "object" ? req.body : {};
+    const priceRaw = body.purchase_price_sar;
+    if (!id) return reply.code(400).send({ ok: false, error: "id required" });
+    const existing = db.prepare("SELECT id FROM battery_unit WHERE id = ?").get(id);
+    if (!existing) return reply.code(404).send({ ok: false, error: "battery not found" });
+    const price = (priceRaw !== undefined && priceRaw !== null && priceRaw !== "")
+      ? parseFloat(priceRaw) : null;
+    if (price !== null && (isNaN(price) || price < 0))
+      return reply.code(400).send({ ok: false, error: "purchase_price_sar must be >= 0" });
+    patchPrice.run({ id, price });
+    return { ok: true, id, purchase_price_sar: price };
+  });
+
+
+  // â”€â”€ PATCH status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fastify.patch("/api/fleet/batteries/:id/status", { preHandler: requireAuth }, async function (req, reply) {
     const id     = String(req.params.id  || "").trim();
     const body   = req.body && typeof req.body === "object" ? req.body : {};
@@ -163,14 +209,14 @@ module.exports = async function batteriesRoutes(fastify) {
     return { ok: true, from_status: existing.status, to_status: status };
   });
 
-  // ── GET log ────────────────────────────────────────────
+  // â”€â”€ GET log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fastify.get("/api/fleet/batteries/:id/log", async function (req, reply) {
     const id = String(req.params.id || "").trim();
     if (!id) return reply.code(400).send({ ok: false, error: "id required" });
     return { ok: true, items: selLog.all(id) };
   });
 
-  // ── DELETE ─────────────────────────────────────────────
+  // â”€â”€ DELETE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fastify.delete("/api/fleet/batteries/:id", { preHandler: requireAuth }, async function (req, reply) {
     const id = String(req.params.id || "").trim();
     if (!id) return reply.code(400).send({ ok: false, error: "id required" });

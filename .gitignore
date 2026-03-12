@@ -55,3 +55,12 @@ server/data/*.sqlite-shm
 # Seed scripts (self-delete but guard anyway)
 server/seed_*_dev.cjs
 server/reset_*_dev.cjs
+
+# Temp scripts / probes
+inspect_db.*
+verify*.cjs
+verify*.js
+write-calendar.js
+apply_module*.ps1
+server/migrate_*.cjs
+server/*.db
