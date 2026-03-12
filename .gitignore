@@ -64,3 +64,8 @@ write-calendar.js
 apply_module*.ps1
 server/migrate_*.cjs
 server/*.db
+
+# Editor/patch backup files
+src/pages/*.bak*
+src/pages/*.broken*
+src/pages/*.__tmp
