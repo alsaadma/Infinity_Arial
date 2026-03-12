@@ -1,4 +1,5 @@
 ﻿import React from "react";
+import { useNavigate } from "react-router-dom";
 import { normalizeUiText } from "../core/text/normalizeUiText";
 // Link import removed - unused in current Command view
 import CapacityRiskPanel from "./command/CapacityRiskPanel";
@@ -179,6 +180,7 @@ function saveResult(result: CommandResult): void {
   localStorage.setItem(LS_KEY, JSON.stringify(result));
 }
 
+// @ts-ignore -- retained for future use
 function clearResult(): void {
   localStorage.removeItem(LS_KEY);
 }
@@ -293,10 +295,18 @@ function NoState(props: { onSeed: () => void }) {
 
 function ElseBranch(props: {
   result: CommandResult;
-  onReseed: () => void;
-  onClear: () => void;
 }) {
   const { result } = props;
+  const navigate = useNavigate();
+  const [__kpi, __setKpi] = React.useState<any>(null);
+  React.useEffect(() => {
+    Promise.all([
+      fetch("/api/reporting/kpi-summary").then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch("/api/costing/summary").then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([rep, cost]) => {
+      if (rep || cost) __setKpi({ ...rep, cost_floor: cost?.cost_floor_per_show_sar ?? null });
+    });
+  }, []);
           
   const __dcHardResetLocal = () => {
     try { localStorage.removeItem(LS_KEY); } catch {}
@@ -313,6 +323,7 @@ function ElseBranch(props: {
     } catch {}
     try { window.location.reload(); } catch {}
   };
+  void __dcHardResetLocal; // retained for emergency use
 //## APB_CLEAN_DEFS2_BEGIN
         // Action Plan (B) Clean, semi-manual (component-scope, BEFORE JSX)
         type ActionPlanStatus = "TODO" | "IN_PROGRESS" | "BLOCKED" | "DONE";
@@ -717,20 +728,56 @@ return (
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={props.onReseed} style={{ padding: "8px 10px", borderRadius: 10 }}>
-              Reseed sample
-            </button>
-            <button onClick={props.onClear} style={{ padding: "8px 10px", borderRadius: 10 }}>
-              Clear state
-            </button>
-            <button onClick={() => __dcHardResetLocal()} style={{ padding: "8px 10px", borderRadius: 10 }}>
-              Hard reset local
-            </button>
-          </div>
+
         </div>
       </div>
 
+      {/* ── KPI Strip + Quick Nav ── */}
+      {__kpi && (
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:12 }}>
+          <div style={{ background:"rgba(74,158,255,0.10)", border:"1px solid rgba(74,158,255,0.25)", borderRadius:10, padding:"10px 16px", minWidth:148 }}>
+            <div style={{ fontSize:11, color:"#8a9bc0", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Battery Health</div>
+            <div style={{ fontSize:22, fontWeight:700, color:(__kpi.battery?.avg_health_pct??0)<60?"#ef4444":(__kpi.battery?.avg_health_pct??0)<80?"#f59e0b":"#22c55e" }}>
+              {__kpi.battery?.avg_health_pct??"—"}%
+            </div>
+            <div style={{ fontSize:11, color:"#8a9bc0" }}>avg across {__kpi.battery?.total??0} units</div>
+          </div>
+          <div style={{ background:"rgba(249,168,37,0.10)", border:"1px solid rgba(249,168,37,0.25)", borderRadius:10, padding:"10px 16px", minWidth:148 }}>
+            <div style={{ fontSize:11, color:"#8a9bc0", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Cost Floor / Show</div>
+            <div style={{ fontSize:22, fontWeight:700, color:"#F9A825" }}>
+              {__kpi.cost_floor!=null?"SAR "+Number(__kpi.cost_floor).toLocaleString():"—"}
+            </div>
+            <div style={{ fontSize:11, color:"#8a9bc0" }}>dep + maintenance</div>
+          </div>
+          <div style={{ background:"rgba(67,160,71,0.10)", border:"1px solid rgba(67,160,71,0.25)", borderRadius:10, padding:"10px 16px", minWidth:148 }}>
+            <div style={{ fontSize:11, color:"#8a9bc0", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Maintenance 30d</div>
+            <div style={{ fontSize:22, fontWeight:700, color:"#43A047" }}>{__kpi.maintenance?.logs_last_30_days??0}</div>
+            <div style={{ fontSize:11, color:"#8a9bc0" }}>events logged</div>
+          </div>
+          {__kpi.permits?.expiring_soon>0 && (
+            <div style={{ background:"rgba(251,140,0,0.10)", border:"1px solid rgba(251,140,0,0.35)", borderRadius:10, padding:"10px 16px", minWidth:148 }}>
+              <div style={{ fontSize:11, color:"#8a9bc0", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Permits Expiring</div>
+              <div style={{ fontSize:22, fontWeight:700, color:"#FB8C00" }}>{__kpi.permits.expiring_soon}</div>
+              <div style={{ fontSize:11, color:"#8a9bc0" }}>within 30 days</div>
+            </div>
+          )}
+          <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8, flexWrap:"wrap" }}>
+            {([
+              { label:"Fleet",     to:"/fleet"     },
+              { label:"Permits",   to:"/permits"   },
+              { label:"Readiness", to:"/readiness" },
+              { label:"Costing",   to:"/costing"   },
+              { label:"Reporting", to:"/reporting" },
+            ] as {label:string;to:string}[]).map(({label,to}) => (
+              <button key={to} onClick={()=>navigate(to)} style={{
+                background:"rgba(74,158,255,0.10)", border:"1px solid rgba(74,158,255,0.25)",
+                borderRadius:8, color:"#4A9EFF", padding:"6px 14px",
+                fontSize:13, fontWeight:600, cursor:"pointer",
+              }}>{label} →</button>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         style={{
           padding: 14,
@@ -815,10 +862,7 @@ export default function Command() {
     setResult(r);
   }, []);
 
-  const onClear = React.useCallback(() => {
-    clearResult();
-    setResult(null);
-  }, []);
+
 
   // Live fetch: shows + permits -> real permit readiness counts.
   // Runs on mount and refreshes every 60 seconds.
@@ -884,7 +928,7 @@ export default function Command() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>Command</div>
           <div style={{ fontSize: 18, opacity: 0.7, marginTop: 2 }}>
-            Read-only projection (safe placeholder)
+            Live operational overview — auto-refreshes every 60s
           </div>
         </div>
 
@@ -895,7 +939,7 @@ export default function Command() {
         {!result ? (
           <NoState onSeed={onSeed} />
         ) : (
-          <ElseBranch result={result} onReseed={onSeed} onClear={onClear} />
+          <ElseBranch result={result} />
         )}
       </div>
     </div>
