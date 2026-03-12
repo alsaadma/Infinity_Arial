@@ -189,4 +189,131 @@ module.exports = async function costingRoutes(app) {
       try { db.close(); } catch {}
     }
   });
+  // ── GET /api/costs/show/:showId ─────────────────────────────
+  app.get('/api/costs/show/:showId', async (req) => {
+    const { showId } = req.params;
+    const db = openDb();
+    try {
+      const show = db.prepare('SELECT id, name, date FROM show_event WHERE id = ?').get(showId);
+      if (!show) return { ok: false, error: 'Show not found' };
+      const rows = db.prepare(
+        'SELECT * FROM show_cost WHERE show_id = ? ORDER BY created_at ASC'
+      ).all(showId);
+      const subtotals = {};
+      let grand = 0;
+      for (const r of rows) {
+        const total = r.quantity * r.unit_cost;
+        subtotals[r.category] = (subtotals[r.category] || 0) + total;
+        grand += total;
+      }
+      return { ok: true, show, items: rows, subtotals, grand_total: Math.round(grand * 100) / 100 };
+    } finally { try { db.close(); } catch {} }
+  });
+
+  // ── POST /api/costs ──────────────────────────────────────────
+  app.post('/api/costs', async (req, reply) => {
+    const { show_id, category, description, quantity, unit_cost, hours_flown, notes, created_by } = req.body ?? {};
+    const CATS = ['drone_deployment','technician_labor','travel_logistics','equipment_wear','permits'];
+    if (!show_id || !category || !CATS.includes(category) || unit_cost === undefined) {
+      return reply.status(400).send({ ok: false, error: 'show_id, category, unit_cost are required' });
+    }
+    const qty  = parseFloat(quantity  ?? 1);
+    const cost = parseFloat(unit_cost);
+    if (isNaN(qty) || qty <= 0)   return reply.status(400).send({ ok: false, error: 'quantity must be > 0' });
+    if (isNaN(cost) || cost < 0)  return reply.status(400).send({ ok: false, error: 'unit_cost must be >= 0' });
+    const db = openDb();
+    try {
+      const show = db.prepare('SELECT id FROM show_event WHERE id = ?').get(show_id);
+      if (!show) return reply.status(404).send({ ok: false, error: 'Show not found' });
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO show_cost (id, show_id, category, description, quantity, unit_cost, hours_flown, notes, created_by) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, show_id, category, description ?? null, qty, cost,
+            hours_flown != null ? parseFloat(hours_flown) : null,
+            notes ?? null, created_by ?? null);
+      const row = db.prepare('SELECT * FROM show_cost WHERE id = ?').get(id);
+      return reply.status(201).send({ ok: true, item: row });
+    } finally { try { db.close(); } catch {} }
+  });
+
+  // ── PUT /api/costs/:id ───────────────────────────────────────
+  app.put('/api/costs/:id', async (req, reply) => {
+    const { id } = req.params;
+    const { description, quantity, unit_cost, hours_flown, notes } = req.body ?? {};
+    const db = openDb();
+    try {
+      const existing = db.prepare('SELECT * FROM show_cost WHERE id = ?').get(id);
+      if (!existing) return reply.status(404).send({ ok: false, error: 'Cost entry not found' });
+      const qty  = quantity  !== undefined ? parseFloat(quantity)  : existing.quantity;
+      const cost = unit_cost !== undefined ? parseFloat(unit_cost) : existing.unit_cost;
+      if (isNaN(qty) || qty <= 0)  return reply.status(400).send({ ok: false, error: 'quantity must be > 0' });
+      if (isNaN(cost) || cost < 0) return reply.status(400).send({ ok: false, error: 'unit_cost must be >= 0' });
+      db.prepare(
+        'UPDATE show_cost SET description=?, quantity=?, unit_cost=?, hours_flown=?, notes=? WHERE id=?'
+      ).run(
+        description !== undefined ? description : existing.description,
+        qty, cost,
+        hours_flown !== undefined ? (hours_flown != null ? parseFloat(hours_flown) : null) : existing.hours_flown,
+        notes !== undefined ? notes : existing.notes,
+        id
+      );
+      const row = db.prepare('SELECT * FROM show_cost WHERE id = ?').get(id);
+      return { ok: true, item: row };
+    } finally { try { db.close(); } catch {} }
+  });
+
+  // ── DELETE /api/costs/:id ────────────────────────────────────
+  app.delete('/api/costs/:id', async (req, reply) => {
+    const { id } = req.params;
+    const db = openDb();
+    try {
+      const existing = db.prepare('SELECT id FROM show_cost WHERE id = ?').get(id);
+      if (!existing) return reply.status(404).send({ ok: false, error: 'Cost entry not found' });
+      db.prepare('DELETE FROM show_cost WHERE id = ?').run(id);
+      return { ok: true };
+    } finally { try { db.close(); } catch {} }
+  });
+
+  // ── GET /api/costs/summary?from=YYYY-MM-DD&to=YYYY-MM-DD ────
+  app.get('/api/costs/summary', async (req) => {
+    const { from, to } = req.query ?? {};
+    const db = openDb();
+    try {
+      let dateFilter = '';
+      const args = [];
+      if (from) { dateFilter += ' AND se.date >= ?'; args.push(from); }
+      if (to)   { dateFilter += ' AND se.date <= ?'; args.push(to);   }
+
+      const rows = db.prepare(`
+        SELECT sc.category, SUM(sc.quantity * sc.unit_cost) AS total,
+               SUM(sc.hours_flown) AS total_hours
+        FROM show_cost sc
+        JOIN show_event se ON se.id = sc.show_id
+        WHERE 1=1 ${dateFilter}
+        GROUP BY sc.category
+      `).all(...args);
+
+      const byShow = db.prepare(`
+        SELECT se.id, se.name, se.date,
+               SUM(sc.quantity * sc.unit_cost) AS total_cost
+        FROM show_cost sc
+        JOIN show_event se ON se.id = sc.show_id
+        WHERE 1=1 ${dateFilter}
+        GROUP BY se.id
+        ORDER BY total_cost DESC
+      `).all(...args);
+
+      const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+      return {
+        ok: true,
+        period: { from: from ?? null, to: to ?? null },
+        by_category: rows,
+        by_show: byShow,
+        grand_total: Math.round(grandTotal * 100) / 100,
+      };
+    } finally { try { db.close(); } catch {} }
+  });
+
 };
