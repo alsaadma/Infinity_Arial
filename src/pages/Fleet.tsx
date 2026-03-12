@@ -41,7 +41,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span style={{
       display: "inline-block", padding: "2px 10px", borderRadius: 999,
-      fontSize: 16, fontWeight: 600, letterSpacing: 0.5,
+      fontSize: 13, fontWeight: 600, letterSpacing: 0.5,
       background: color + "22", color, border: `1px solid ${color}66`,
     }}>
       {status}
@@ -109,33 +109,33 @@ function DronesTab() {
   useEffect(() => { void load(); }, []);
 
   const cell: React.CSSProperties = {
-    padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 26,
+    padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 14,
   };
   const th: React.CSSProperties = {
-    ...cell, fontWeight: 600, opacity: 0.6, fontSize: 16, textTransform: "uppercase",
+    ...cell, fontWeight: 600, opacity: 0.6, fontSize: 13, textTransform: "uppercase",
     letterSpacing: 0.5,
   };
 
   return (
     <div>
-      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, opacity: 0.7 }}>Add New Drone</div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, opacity: 0.7 }}>Add New Drone</div>
       <div style={{
         display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end",
         marginBottom: 16, padding: 12,
         border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10,
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Serial</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Serial</label>
           <input value={serial} onChange={e => setSerial(e.target.value)}
             placeholder="DR-002" style={inputStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Model</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Model</label>
           <input value={model} onChange={e => setModel(e.target.value)}
             placeholder="L3" style={inputStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Status</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Status</label>
           <select value={status} onChange={e => setStatus(e.target.value as DroneStatus)}
             style={inputStyle}>
             <option>ACTIVE</option>
@@ -152,12 +152,12 @@ function DronesTab() {
         </button>
       </div>
 
-      {error && <div style={{ color: "#f44336", marginBottom: 10, fontSize: 26 }}>{error}</div>}
+      {error && <div style={{ color: "#f44336", marginBottom: 10, fontSize: 14 }}>{error}</div>}
 
       {loading ? (
-        <div style={{ opacity: 0.5, fontSize: 26 }}>Loading…</div>
+        <div style={{ opacity: 0.5, fontSize: 14 }}>Loading…</div>
       ) : drones.length === 0 ? (
-        <div style={{ opacity: 0.5, fontSize: 26 }}>No drones registered yet.</div>
+        <div style={{ opacity: 0.5, fontSize: 14 }}>No drones registered yet.</div>
       ) : (
         <div style={{ overflowX: "auto", border: "2px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: 8 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -181,7 +181,7 @@ function DronesTab() {
                     <select
                       value={d.status}
                       onChange={e => updateStatus(d.id, e.target.value as DroneStatus)}
-                      style={{ ...inputStyle, fontSize: 16, padding: "3px 6px" }}
+                      style={{ ...inputStyle, fontSize: 13, padding: "3px 6px" }}
                     >
                       <option>ACTIVE</option>
                       <option>MAINTENANCE</option>
@@ -199,7 +199,7 @@ function DronesTab() {
                           .catch(() => setError("Failed to delete drone."));
                       }}
                       style={{
-                        padding: "4px 14px", borderRadius: 8, fontSize: 16, cursor: "pointer",
+                        padding: "4px 14px", borderRadius: 8, fontSize: 13, cursor: "pointer",
                         border: "1px solid rgba(244,67,54,0.4)",
                         background: "rgba(244,67,54,0.12)", color: "inherit",
                       }}
@@ -263,10 +263,10 @@ function BatteriesTab() {
   useEffect(() => { void load(); }, []);
 
   const cell: React.CSSProperties = {
-    padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 26,
+    padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 14,
   };
   const th: React.CSSProperties = {
-    ...cell, fontWeight: 600, opacity: 0.6, fontSize: 16, textTransform: "uppercase",
+    ...cell, fontWeight: 600, opacity: 0.6, fontSize: 13, textTransform: "uppercase",
     letterSpacing: 0.5,
   };
 
@@ -278,12 +278,12 @@ function BatteriesTab() {
         border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10,
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Serial</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Serial</label>
           <input value={serial} onChange={e => setSerial(e.target.value)}
             placeholder="BAT-001" style={inputStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Type</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Type</label>
           <select value={type} onChange={e => setType(e.target.value as BatteryType)}
             style={inputStyle}>
             <option value="ON_DRONE">ON_DRONE</option>
@@ -292,17 +292,17 @@ function BatteriesTab() {
           </select>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Drone ID (optional)</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Drone ID (optional)</label>
           <input value={droneId} onChange={e => setDroneId(e.target.value)}
             placeholder="paste drone UUID" style={{ ...inputStyle, width: 180 }} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Max Cycles</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Max Cycles</label>
           <input value={cycleMax} onChange={e => setCycleMax(e.target.value)}
             type="number" style={{ ...inputStyle, width: 80 }} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 16, opacity: 0.6 }}>Price (SAR)</label>
+          <label style={{ fontSize: 13, opacity: 0.6 }}>Price (SAR)</label>
           <input value={batPrice} onChange={e => setBatPrice(e.target.value)}
             placeholder="320" type="number" min="0" style={{ ...inputStyle, width: 100 }} />
         </div>
@@ -314,12 +314,12 @@ function BatteriesTab() {
         </button>
       </div>
 
-      {error && <div style={{ color: "#f44336", marginBottom: 10, fontSize: 26 }}>{error}</div>}
+      {error && <div style={{ color: "#f44336", marginBottom: 10, fontSize: 14 }}>{error}</div>}
 
       {loading ? (
-        <div style={{ opacity: 0.5, fontSize: 26 }}>Loading…</div>
+        <div style={{ opacity: 0.5, fontSize: 14 }}>Loading…</div>
       ) : batteries.length === 0 ? (
-        <div style={{ opacity: 0.5, fontSize: 26 }}>No batteries registered yet.</div>
+        <div style={{ opacity: 0.5, fontSize: 14 }}>No batteries registered yet.</div>
       ) : (
         <div style={{ overflowX: "auto", border: "2px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: 8 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -341,7 +341,7 @@ function BatteriesTab() {
                   <td style={cell}>{b.cycle_count} / {b.cycle_max}</td>
                   <td style={cell}>{b.health_pct.toFixed(1)}%</td>
                   <td style={cell}><StatusBadge status={b.status} /></td>
-                  <td style={{ ...cell, fontSize: 16, opacity: 0.6 }}>
+                  <td style={{ ...cell, fontSize: 13, opacity: 0.6 }}>
                     {b.drone_id ?? "—"}
                   </td>
                 </tr>
@@ -356,12 +356,12 @@ function BatteriesTab() {
 
 // ── Shared styles ─────────────────────────────────────────────────
 const inputStyle: React.CSSProperties = {
-  padding: "6px 10px", borderRadius: 8, fontSize: 26,
+  padding: "6px 10px", borderRadius: 8, fontSize: 14,
   border: "1px solid rgba(255,255,255,0.15)",
   background: "rgba(255,255,255,0.05)", color: "inherit", outline: "none",
 };
 const btnStyle: React.CSSProperties = {
-  padding: "7px 14px", borderRadius: 8, fontSize: 26, cursor: "pointer",
+  padding: "7px 14px", borderRadius: 8, fontSize: 14, cursor: "pointer",
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(99,179,237,0.18)", color: "inherit",
 };
@@ -373,7 +373,7 @@ export default function Fleet() {
   const [tab, setTab] = useState<Tab>("drones");
 
   const tabBtn = (t: Tab): React.CSSProperties => ({
-    padding: "6px 18px", borderRadius: 8, fontSize: 26, cursor: "pointer",
+    padding: "6px 18px", borderRadius: 8, fontSize: 14, cursor: "pointer",
     border: "1px solid rgba(255,255,255,0.15)",
     background: tab === t ? "rgba(99,179,237,0.22)" : "rgba(255,255,255,0.04)",
     color: "inherit", fontWeight: tab === t ? 600 : 400,
@@ -383,7 +383,7 @@ export default function Fleet() {
     <div style={{ padding: 8 }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Fleet</div>
-        <div style={{ fontSize: 16, opacity: 0.5 }}>Asset Registry — Module 2</div>
+        <div style={{ fontSize: 13, opacity: 0.5 }}>Asset Registry — Module 2</div>
       </div>
 
       {/* Tab bar */}
