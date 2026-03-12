@@ -82,7 +82,7 @@ module.exports = async function (app) {
         SELECT
           SUM(CASE WHEN expires_at BETWEEN ? AND ? THEN 1 ELSE 0 END)  AS expiring_soon,
           SUM(CASE WHEN expires_at < ?             THEN 1 ELSE 0 END)  AS expired,
-          SUM(CASE WHEN status = 'approved'        THEN 1 ELSE 0 END)  AS approved
+          SUM(CASE WHEN status = 'APPROVED'        THEN 1 ELSE 0 END)  AS approved
         FROM permit
       `).get(today, in30, today);
 
