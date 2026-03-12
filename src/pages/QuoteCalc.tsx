@@ -13,11 +13,11 @@ const GOLD  = "#F9A825";
 const TIERS = [300, 500, 1000] as const;
 type Tier = typeof TIERS[number];
 
-const TRAVEL_ZONES: Record<string, { label: string; default: number }> = {
-  LOCAL:         { label: "Local — same city",          default: 0      },
-  REGIONAL:      { label: "Regional — up to 300 km",    default: 8000   },
-  NATIONAL:      { label: "National — 300 km+",         default: 20000  },
-  INTERNATIONAL: { label: "International",              default: 60000  },
+const TRAVEL_ZONES: Record<string, { label: string; base: number; daily: number }> = {
+  LOCAL:         { label: "Local — same city",          base: 0,      daily: 0     },
+  REGIONAL:      { label: "Regional — up to 300 km",    base: 5000,   daily: 800   },
+  NATIONAL:      { label: "National — 300 km+",         base: 12000,  daily: 1500  },
+  INTERNATIONAL: { label: "International",              base: 40000,  daily: 4000  },
 };
 
 const MARGIN_OPTIONS = [
@@ -90,6 +90,7 @@ export default function QuoteCalc() {
   const [tier,          setTier]          = useState<Tier>(1000);
   const [costPerDrone,  setCostPerDrone]  = useState("450");
   const [durationMin,   setDurationMin]   = useState("15");
+  const [tripDays,      setTripDays]      = useState("3");
   const [travelZone,    setTravelZone]    = useState("LOCAL");
   const [travelOverride,setTravelOverride]= useState("");
   const [margin,        setMargin]        = useState(0.25);
@@ -103,12 +104,13 @@ export default function QuoteCalc() {
   const [quoteNotes,    setQuoteNotes]    = useState("");
 
   const travelCost = useMemo(() => {
+    const days = Math.max(1, parseInt(tripDays) || 1);
     if (travelOverride.trim() !== "") {
       const n = parseFloat(travelOverride);
-      return Number.isFinite(n) ? n : TRAVEL_ZONES[travelZone].default;
+      return Number.isFinite(n) ? n : TRAVEL_ZONES[travelZone].base + TRAVEL_ZONES[travelZone].daily * days;
     }
-    return TRAVEL_ZONES[travelZone].default;
-  }, [travelZone, travelOverride]);
+    return TRAVEL_ZONES[travelZone].base + TRAVEL_ZONES[travelZone].daily * days;
+  }, [travelZone, travelOverride, tripDays]);
 
   const quote = useMemo((): QuoteResult => {
     const cpd  = parseFloat(costPerDrone)  || 0;
@@ -118,14 +120,15 @@ export default function QuoteCalc() {
     const trns = parseFloat(transport)     || 0;
     const fd   = parseFloat(food)          || 0;
 
+    const days = Math.max(1, parseInt(tripDays) || 1);
     const lines: LineItem[] = [
-      { label: "Drone Fleet Operation",   cost: tier * cpd,  note: `${tier.toLocaleString()} drones x SAR ${cpd.toLocaleString()} per unit` },
-      { label: "Travel & Mobilization",   cost: travelCost,  note: TRAVEL_ZONES[travelZone].label },
-      { label: "Permits & Regulatory",    cost: perm,        note: "Flat rate" },
-      { label: "Accommodation",           cost: acc,         note: "Flat rate" },
-      { label: "Tickets & Entry",         cost: tix,         note: "Flat rate" },
-      { label: "Ground Transportation",   cost: trns,        note: "Flat rate" },
-      { label: "Food & Per Diem",         cost: fd,          note: "Flat rate" },
+      { label: "Drone Fleet Operation",   cost: tier * cpd,    note: `${tier.toLocaleString()} drones x SAR ${cpd.toLocaleString()} per unit` },
+      { label: "Travel & Mobilization",   cost: travelCost,    note: `${TRAVEL_ZONES[travelZone].label} · base + ${days}d` },
+      { label: "Permits & Regulatory",    cost: perm * days,   note: `SAR ${perm.toLocaleString()}/day x ${days} days` },
+      { label: "Accommodation",           cost: acc  * days,   note: `SAR ${acc.toLocaleString()}/day x ${days} days` },
+      { label: "Tickets & Entry",         cost: tix  * days,   note: `SAR ${tix.toLocaleString()}/day x ${days} days` },
+      { label: "Ground Transportation",   cost: trns * days,   note: `SAR ${trns.toLocaleString()}/day x ${days} days` },
+      { label: "Food & Per Diem",         cost: fd   * days,   note: `SAR ${fd.toLocaleString()}/day x ${days} days` },
     ].filter(l => l.cost > 0);
 
     const totalCost        = lines.reduce((s, l) => s + l.cost, 0);
@@ -135,7 +138,7 @@ export default function QuoteCalc() {
     const pricePerDrone    = tier > 0 ? recommendedPrice / tier : 0;
 
     return { lines, totalCost, recommendedPrice, profit, marginPct, pricePerDrone };
-  }, [tier, costPerDrone, travelCost, travelZone, margin, permitFee, accommodation, tickets, transport, food]);
+  }, [tier, costPerDrone, travelCost, travelZone, margin, permitFee, accommodation, tickets, transport, food, tripDays]);
 
   function handlePrint() {
     const win = window.open("", "_blank");
@@ -219,6 +222,13 @@ export default function QuoteCalc() {
               <input type="number" value={durationMin} onChange={e => setDurationMin(e.target.value)}
                 style={{ ...inp, width: 120 }} min="1" max="120" />
             </Row>
+            <Row label="Trip Days">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="number" value={tripDays} onChange={e => setTripDays(e.target.value)}
+                  style={{ ...inp, width: 100 }} min="1" max="30" />
+                <span style={{ color: MUTED, fontSize: 12 }}>days on-site (drives travel + daily costs)</span>
+              </div>
+            </Row>
           </div>
 
           <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
@@ -242,18 +252,27 @@ export default function QuoteCalc() {
           <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
             <SectionTitle>Travel & Mobilization</SectionTitle>
             <Row label="Travel Zone">
-              <select value={travelZone}
-                onChange={e => { setTravelZone(e.target.value); setTravelOverride(""); }}
-                style={inp}>
-                {Object.entries(TRAVEL_ZONES).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
+              <div>
+                <select value={travelZone}
+                  onChange={e => { setTravelZone(e.target.value); setTravelOverride(""); }}
+                  style={inp}>
+                  {Object.entries(TRAVEL_ZONES).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
+                  ))}
+                </select>
+                <div style={{ color: MUTED, fontSize: 11, marginTop: 5 }}>
+                  Base: SAR {TRAVEL_ZONES[travelZone].base.toLocaleString()}
+                  {" + "}
+                  SAR {TRAVEL_ZONES[travelZone].daily.toLocaleString()}/day
+                  {" x "}{Math.max(1, parseInt(tripDays)||1)} days
+                  {" = SAR "}{travelCost.toLocaleString()}
+                </div>
+              </div>
             </Row>
             <Row label="Travel Cost (SAR)">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <input type="number"
-                  value={travelOverride !== "" ? travelOverride : TRAVEL_ZONES[travelZone].default}
+                  value={travelOverride !== "" ? travelOverride : travelCost}
                   onChange={e => setTravelOverride(e.target.value)}
                   style={{ ...inp, width: 140 }} min="0" step="500" />
                 {travelOverride !== "" ? (
@@ -269,7 +288,10 @@ export default function QuoteCalc() {
           </div>
 
           <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
-            <SectionTitle>Flat Rate Line Items (SAR)</SectionTitle>
+            <SectionTitle>Daily Costs (SAR / day)</SectionTitle>
+            <p style={{ color: MUTED, fontSize: 12, margin: "-8px 0 14px" }}>
+              Each rate x {Math.max(1, parseInt(tripDays)||1)} trip days = total per item
+            </p>
             {([
               { label: "Permits & Regulatory", value: permitFee,     setter: setPermitFee     },
               { label: "Accommodation",         value: accommodation, setter: setAccommodation },
