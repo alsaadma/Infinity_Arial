@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { useAssetAuth, type AssetSession } from "../hooks/useAssetAuth";
 
 type SiteStatus = "ACTIVE" | "INACTIVE" | "RESTRICTED";
@@ -208,12 +208,126 @@ function SiteForm({ token, initial, onDone, onCancel }: {
   );
 }
 
+function LaunchAreaCalc({ siteName }: { siteName: string }) {
+  const CARD2  = "#0D1B2E";
+  const BDR2   = "rgba(255,255,255,0.08)";
+  const ACCENT = "#4A9EFF";
+  const TEXT   = "#F0F4FF";
+  const MUTED  = "#8FA3C0";
+  const GREEN  = "#43A047";
+  const GOLD   = "#F9A825";
+
+  const [drones, setDrones] = useState("1000");
+
+  const d = Math.max(0, parseInt(drones) || 0);
+
+  // DAMODA formula: drones × 0.25 m²
+  const launchGrid    = d * 0.25;
+  const controlStation = 100;
+  const batteryZone    = 15;
+  const rawTotal       = launchGrid + controlStation + batteryZone;
+  // Round up to nearest 50 m²
+  const permitArea     = Math.ceil(rawTotal / 50) * 50;
+  // Approximate square side for permit dimensions
+  const side           = Math.ceil(Math.sqrt(permitArea));
+
+  const rows = [
+    { label: "Launch Grid",      formula: `${d.toLocaleString()} drones × 0.25 m²`,  value: launchGrid,     color: ACCENT },
+    { label: "Control Station",  formula: "Fixed — recommended",                        value: controlStation, color: GOLD   },
+    { label: "Battery Zone",     formula: "Fixed — charging + staging",                 value: batteryZone,    color: MUTED  },
+  ];
+
+  return (
+    <div style={{ margin: "0 12px 4px", background: CARD2,
+                  border: `1px solid ${BDR2}`, borderRadius: 10, padding: "18px 22px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <span style={{ color: TEXT, fontWeight: 700, fontSize: 14 }}>
+            📐 Launch Area Calculator — {siteName}
+          </span>
+          <span style={{ color: MUTED, fontSize: 12, marginLeft: 10 }}>
+            Based on DAMODA ground space formula
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <label style={{ color: MUTED, fontSize: 13, whiteSpace: "nowrap" as const }}>
+          Drones Required:
+        </label>
+        <input
+          type="number"
+          value={drones}
+          onChange={e => setDrones(e.target.value)}
+          min="0" step="100"
+          style={{
+            background: "#1A2A44", border: `1px solid ${BDR2}`, borderRadius: 8,
+            color: TEXT, padding: "7px 12px", fontSize: 14, outline: "none", width: 120,
+          }}
+        />
+        <span style={{ color: MUTED, fontSize: 12 }}>
+          Quick: {" "}
+          {[300, 500, 1000].map(n => (
+            <button key={n} onClick={() => setDrones(String(n))} style={{
+              background: parseInt(drones) === n ? "rgba(74,158,255,0.2)" : "#1A2A44",
+              border: `1px solid ${BDR2}`, borderRadius: 6,
+              color: parseInt(drones) === n ? ACCENT : MUTED,
+              padding: "3px 10px", fontSize: 12, cursor: "pointer", marginRight: 4,
+            }}>{n.toLocaleString()}</button>
+          ))}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {rows.map(r => (
+          <div key={r.label} style={{ background: "rgba(255,255,255,0.03)",
+                border: `1px solid ${BDR2}`, borderRadius: 8, padding: "12px 14px" }}>
+            <div style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" as const,
+                          letterSpacing: 0.5, marginBottom: 6 }}>{r.label}</div>
+            <div style={{ color: r.color, fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+              {r.value.toLocaleString()} m²
+            </div>
+            <div style={{ color: MUTED, fontSize: 11 }}>{r.formula}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "linear-gradient(135deg,#0D2347,#0D3B1A)",
+                    border: "1px solid rgba(67,160,71,0.3)", borderRadius: 10,
+                    padding: "14px 18px", display: "flex",
+                    justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" as const,
+                        letterSpacing: 0.5, marginBottom: 4 }}>Permit Request — Minimum Area</div>
+          <div style={{ color: GREEN, fontSize: 22, fontWeight: 800 }}>
+            {permitArea.toLocaleString()} m²
+          </div>
+          <div style={{ color: MUTED, fontSize: 12, marginTop: 3 }}>
+            Approx. {side} m × {side} m · rounded up to nearest 50 m²
+          </div>
+        </div>
+        <div style={{ textAlign: "right" as const }}>
+          <div style={{ color: MUTED, fontSize: 11, marginBottom: 4 }}>Breakdown</div>
+          <div style={{ color: TEXT, fontSize: 12 }}>
+            {launchGrid.toLocaleString()} + {controlStation} + {batteryZone} = {rawTotal.toLocaleString()} m²
+          </div>
+          <div style={{ color: MUTED, fontSize: 11, marginTop: 3 }}>
+            Safety buffer per local authority requirements
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SitesPanel({ session, onLogout }: { session: AssetSession; onLogout: () => void }) {
   const [sites,    setSites]   = useState<Site[]>([]);
   const [loading,  setLoading] = useState(true);
   const [creating, setCreating]= useState(false);
   const [editing,  setEditing] = useState<Site | null>(null);
-  const [filter,   setFilter]  = useState<string>("ALL");
+  const [filter,      setFilter]     = useState<string>("ALL");
+  const [expandedSite, setExpandedSite] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -331,7 +445,8 @@ function SitesPanel({ session, onLogout }: { session: AssetSession; onLogout: ()
             </tr></thead>
             <tbody>
               {filtered.map(s => (
-                <tr key={s.id} style={{ borderBottom: `1px solid ${BDR}` }}>
+                <React.Fragment key={s.id}>
+              <tr style={{ borderBottom: `1px solid ${BDR}` }}>
                   <td style={{ ...td, fontWeight: 600, whiteSpace: "nowrap" as const }}>
                     {s.name}
                   </td>
@@ -367,9 +482,26 @@ function SitesPanel({ session, onLogout }: { session: AssetSession; onLogout: ()
                     <div style={{ display: "flex", gap: 6 }}>
                       <Btn small onClick={() => { setCreating(false); setEditing(s); }}>Edit</Btn>
                       <Btn small danger onClick={() => deleteSite(s.id, s.name)}>Delete</Btn>
+                      <button
+                        onClick={() => setExpandedSite(expandedSite === s.id ? null : s.id)}
+                        title="Launch Area Calculator"
+                        style={{
+                          background: expandedSite === s.id ? "rgba(74,158,255,0.2)" : "#1A2A44",
+                          border: `1px solid ${BDR}`, borderRadius: 8,
+                          color: expandedSite === s.id ? "#4A9EFF" : "#8FA3C0",
+                          padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        }}>📐 Area</button>
                     </div>
                   </td>
                 </tr>
+                {expandedSite === s.id && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: "0 0 12px", background: "rgba(11,22,40,0.6)" }}>
+                      <LaunchAreaCalc siteName={s.name} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
               ))}
             </tbody>
           </table>
