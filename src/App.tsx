@@ -33,60 +33,72 @@ const NAV = [
   { to: "/maintenance",  label: "Maintenance"  },
 ];
 
+const SIDEBAR_W = 200;
+
 function NavLink({ to, label }: { to: string; label: string }) {
-  const loc     = useLocation();
-  const active  = loc.pathname === to || loc.pathname.startsWith(to + "/");
+  const loc    = useLocation();
+  const active = loc.pathname === to || loc.pathname.startsWith(to + "/");
   return (
-    <Link
-      to={to}
-      style={{
-        padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-        color: active ? "#4A9EFF" : "#8FA3C0",
-        background: active ? "rgba(74,158,255,0.12)" : "transparent",
-        textDecoration: "none", transition: "background 0.15s, color 0.15s",
-      }}
-      onMouseEnter={e => {
-        if (!active) {
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(74,158,255,0.08)";
-          (e.currentTarget as HTMLAnchorElement).style.color = "#4A9EFF";
-        }
-      }}
-      onMouseLeave={e => {
-        if (!active) {
-          (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-          (e.currentTarget as HTMLAnchorElement).style.color = "#8FA3C0";
-        }
-      }}
+    <Link to={to} style={{
+      display: "flex", alignItems: "center",
+      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+      color: active ? "#4A9EFF" : "#8FA3C0",
+      background: active ? "rgba(74,158,255,0.12)" : "transparent",
+      textDecoration: "none", transition: "background 0.15s, color 0.15s",
+      borderLeft: active ? "3px solid #4A9EFF" : "3px solid transparent",
+    }}
+    onMouseEnter={e => {
+      if (!active) {
+        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(74,158,255,0.08)";
+        (e.currentTarget as HTMLAnchorElement).style.color = "#4A9EFF";
+      }
+    }}
+    onMouseLeave={e => {
+      if (!active) {
+        (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+        (e.currentTarget as HTMLAnchorElement).style.color = "#8FA3C0";
+      }
+    }}
     >{label}</Link>
   );
 }
 
 export default function App() {
   return (
-    <div style={{ minHeight: "100vh", background: "#0B1628", color: "#F0F4FF" }}>
-      <header style={{
-        padding: "0 24px", height: 56, display: "flex", alignItems: "center",
-        justifyContent: "space-between", background: "#111E35",
-        borderBottom: "1px solid rgba(255,255,255,0.08)", position: "sticky",
-        top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+    <div style={{ minHeight: "100vh", background: "#0B1628", color: "#F0F4FF", display: "flex" }}>
+
+      {/* ── Sidebar ── */}
+      <aside style={{
+        width: SIDEBAR_W, minWidth: SIDEBAR_W, minHeight: "100vh",
+        background: "#111E35", borderRight: "1px solid rgba(255,255,255,0.08)",
+        display: "flex", flexDirection: "column",
+        position: "sticky", top: 0, alignSelf: "flex-start", height: "100vh",
+        overflowY: "auto",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Logo */}
+        <div style={{
+          padding: "18px 16px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)",
+          display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+        }}>
           <div style={{
-            width: 28, height: 28, borderRadius: 8,
-            background: "linear-gradient(135deg, #1B4FD8, #4A9EFF)",
+            width: 32, height: 32, borderRadius: 9,
+            background: "linear-gradient(135deg,#1B4FD8,#4A9EFF)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, fontWeight: 800, color: "#fff",
+            fontSize: 16, fontWeight: 800, color: "#fff", flexShrink: 0,
           }}>D</div>
-          <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: 0.3, color: "#F0F4FF" }}>
+          <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 0.3, color: "#F0F4FF" }}>
             DRONES CALC
           </span>
         </div>
-        <nav style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+        {/* Nav links */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 2, padding: "12px 8px", flex: 1 }}>
           {NAV.map(n => <NavLink key={n.to} to={n.to} label={n.label} />)}
         </nav>
-      </header>
+      </aside>
 
-      <main style={{ padding: "24px 28px" }}>
+      {/* ── Main content ── */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <main style={{ padding: "24px 28px", flex: 1 }}>
         <React.Suspense fallback={<div style={{ padding: 16, opacity: 0.6 }}>Loading...</div>}>
           <Routes>
             <Route path="/"              element={<Navigate to="/command" replace />} />
@@ -108,7 +120,8 @@ export default function App() {
             <Route path="*"              element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>
         </React.Suspense>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
