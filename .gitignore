@@ -69,3 +69,6 @@ server/*.db
 src/pages/*.bak*
 src/pages/*.broken*
 src/pages/*.__tmp
+
+# Route backup files
+server/routes/*.bak*
