@@ -38,6 +38,57 @@ function permitStatusBg(s: string) {
   return "transparent";
 }
 
+const PERMIT_TYPES = [
+  {
+    type:      "Airspace Authorization",
+    authority: "GACA",
+    timing:    "21+ days before show",
+    note:      "Core permit — required for every show. Covers altitude ceiling and coordinates.",
+  },
+  {
+    type:      "NOTAM",
+    authority: "GACA / ANSP",
+    timing:    "72 hours before show",
+    note:      "Notifies other aircraft of temporary airspace restriction.",
+  },
+  {
+    type:      "Event / Public Gathering Permit",
+    authority: "Ministry of Interior / Municipality",
+    timing:    "14–30 days before show",
+    note:      "Required when a public audience is present.",
+  },
+  {
+    type:      "Venue / Site Access Permit",
+    authority: "Site owner / Municipality / Royal Commission",
+    timing:    "Varies by venue",
+    note:      "Permission to use the specific location for drone operations.",
+  },
+  {
+    type:      "Insurance Certificate",
+    authority: "Insurance provider",
+    timing:    "Before show date",
+    note:      "Liability coverage — often required by venue and GACA.",
+  },
+  {
+    type:      "RF Frequency Clearance",
+    authority: "CITC",
+    timing:    "14+ days before show",
+    note:      "Required for drone control frequencies in Saudi airspace.",
+  },
+  {
+    type:      "Commercial Activity License",
+    authority: "Ministry of Commerce / Baladia",
+    timing:    "One-time or annual",
+    note:      "Business licence to operate commercially in KSA.",
+  },
+  {
+    type:      "No-Objection Letter (NOC)",
+    authority: "Police / Venue owner / Royal Court",
+    timing:    "7–21 days before show",
+    note:      "Often required for high-profile or government events.",
+  },
+] as const;
+
 const inp: React.CSSProperties = {
   background: "#1A2A44", border: `1px solid ${BDR}`, borderRadius: 8,
   color: TEXT, padding: "9px 14px", fontSize: 14, outline: "none",
@@ -209,6 +260,156 @@ function PermitForm({ token, shows, initial, onDone, onCancel }: {
   );
 }
 
+function PermitChecklist({
+  session, shows, permits, onCreated,
+}: {
+  session: AssetSession;
+  shows: ShowOption[];
+  permits: Permit[];
+  onCreated: () => void;
+}) {
+  const CARD2  = "#0D1B2E";
+  const BDR2   = "rgba(255,255,255,0.08)";
+  const ACCENT = "#4A9EFF";
+  const TEXT   = "#F0F4FF";
+  const MUTED  = "#8FA3C0";
+  const GREEN  = "#43A047";
+  const GOLD   = "#F9A825";
+
+  const [selectedShow, setSelectedShow] = useState<string>("");
+  const [creating,     setCreating]     = useState<string | null>(null);
+  const [open,         setOpen]         = useState(false);
+
+  // permits already created for this show
+  const existingTypes = permits
+    .filter(p => p.show_id === selectedShow)
+    .map(p => p.permit_type);
+
+  async function toggle(type: string, authority: string, checked: boolean) {
+    if (!checked) return; // uncheck does nothing
+    if (!selectedShow) { alert("Select a show first."); return; }
+    setCreating(type);
+    await fetch("/api/permits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify({
+        show_id:      selectedShow,
+        permit_type:  type,
+        authority,
+        status:       "DRAFT",
+        notes:        null,
+        reference_number: null,
+        submitted_at: null,
+        approved_at:  null,
+        expires_at:   null,
+      }),
+    });
+    setCreating(null);
+    onCreated();
+  }
+
+  return (
+    <div style={{ background: CARD2, border: `1px solid ${BDR2}`, borderRadius: 12,
+                  marginBottom: 20, overflow: "hidden" }}>
+      {/* Header row — always visible */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "14px 20px", cursor: "pointer",
+                  borderBottom: open ? `1px solid ${BDR2}` : "none" }}>
+        <div>
+          <span style={{ color: TEXT, fontWeight: 700, fontSize: 14 }}>
+            ✅ Permit Checklist
+          </span>
+          <span style={{ color: MUTED, fontSize: 12, marginLeft: 10 }}>
+            Auto-create DRAFT permits per show
+          </span>
+        </div>
+        <span style={{ color: MUTED, fontSize: 13 }}>{open ? "▲ Hide" : "▼ Expand"}</span>
+      </div>
+
+      {open && (
+        <div style={{ padding: "16px 20px" }}>
+          {/* Show selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+            <label style={{ color: MUTED, fontSize: 13, whiteSpace: "nowrap" as const }}>
+              Select Show:
+            </label>
+            <select
+              value={selectedShow}
+              onChange={e => setSelectedShow(e.target.value)}
+              style={{ ...inp, width: "auto", minWidth: 240 }}>
+              <option value="">— choose a show —</option>
+              {shows.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.date ? s.date.slice(0, 10) : "no date"})
+                </option>
+              ))}
+            </select>
+            {selectedShow && (
+              <span style={{ color: MUTED, fontSize: 12 }}>
+                {existingTypes.length} of {PERMIT_TYPES.length} permits created
+              </span>
+            )}
+          </div>
+
+          {/* Checklist */}
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+            {PERMIT_TYPES.map(pt => {
+              const done    = existingTypes.includes(pt.type);
+              const busy    = creating === pt.type;
+              return (
+                <div key={pt.type} style={{
+                  display: "flex", alignItems: "flex-start", gap: 14,
+                  background: done ? "rgba(67,160,71,0.07)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${done ? "rgba(67,160,71,0.25)" : BDR2}`,
+                  borderRadius: 8, padding: "10px 14px",
+                  opacity: busy ? 0.6 : 1,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={done}
+                    disabled={done || busy || !selectedShow}
+                    onChange={e => toggle(pt.type, pt.authority, e.target.checked)}
+                    style={{ marginTop: 3, accentColor: ACCENT, width: 16, height: 16,
+                              cursor: done || !selectedShow ? "default" : "pointer" }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between",
+                                  alignItems: "center", flexWrap: "wrap" as const, gap: 6 }}>
+                      <span style={{ color: done ? GREEN : TEXT, fontWeight: 600, fontSize: 13 }}>
+                        {pt.type}
+                        {done && <span style={{ color: GREEN, fontSize: 11, marginLeft: 8 }}>✓ DRAFT created</span>}
+                        {busy && <span style={{ color: ACCENT, fontSize: 11, marginLeft: 8 }}>Creating…</span>}
+                      </span>
+                      <span style={{ background: "rgba(249,168,37,0.12)",
+                                      border: "1px solid rgba(249,168,37,0.25)",
+                                      borderRadius: 4, color: GOLD,
+                                      padding: "2px 8px", fontSize: 11 }}>
+                        {pt.timing}
+                      </span>
+                    </div>
+                    <div style={{ color: MUTED, fontSize: 12, marginTop: 3 }}>
+                      <strong style={{ color: MUTED }}>Authority:</strong> {pt.authority}
+                      {" · "}{pt.note}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!selectedShow && (
+            <p style={{ color: MUTED, fontSize: 12, margin: "12px 0 0", fontStyle: "italic" }}>
+              Select a show above to enable the checklist.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: () => void }) {
   const [shows,    setShows]    = useState<ShowOption[]>([]);
   const [permits,  setPermits]  = useState<Permit[]>([]);
@@ -316,6 +517,13 @@ function PermitsPanel({ session, onLogout }: { session: AssetSession; onLogout: 
         </select>
         <span style={{ color: MUTED, fontSize: 13 }}>{filtered.length} permit(s)</span>
       </div>
+
+      <PermitChecklist
+        session={session}
+        shows={shows}
+        permits={permits}
+        onCreated={load}
+      />
 
       {creating && !editing && (
         <PermitForm token={session.token} shows={shows}
