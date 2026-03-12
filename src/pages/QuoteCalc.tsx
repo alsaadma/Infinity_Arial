@@ -1,803 +1,391 @@
-import KpiStrip from "../ui/components/KpiStrip";
+// src/pages/QuoteCalc.tsx — Module: Quote Builder
+import { useState, useMemo } from "react";
 
-import FiltersBar from "../ui/components/FiltersBar";
+const CARD  = "#111E35";
+const BDR   = "rgba(255,255,255,0.08)";
+const ACCENT = "#4A9EFF";
+const TEXT  = "#F0F4FF";
+const MUTED = "#8FA3C0";
+const GREEN = "#43A047";
+const ORANGE = "#FB8C00";
+const GOLD  = "#F9A825";
 
-import { useEffect, useMemo, useState  } from "react";
+const TIERS = [300, 500, 1000] as const;
+type Tier = typeof TIERS[number];
 
-import { Box, Button, Paper, TextField, Typography, Alert, MenuItem } from "@mui/material";
-
-type ActionPlanSortMode = "DEFAULT_P0" | "SCORE_DESC" | "TITLE_ASC" | "ORIGINAL";
-
-const ACTIONPLAN_SORT_KEY = "drones_calc.actionPlan.sortMode";
-
-type SnapshotRecord = {
-
-  id: string;
-
-  name: string;
-
-  created_at: string;
-
-  payload?: any;
-
+const TRAVEL_ZONES: Record<string, { label: string; default: number }> = {
+  LOCAL:         { label: "Local — same city",          default: 0      },
+  REGIONAL:      { label: "Regional — up to 300 km",    default: 8000   },
+  NATIONAL:      { label: "National — 300 km+",         default: 20000  },
+  INTERNATIONAL: { label: "International",              default: 60000  },
 };
 
-function apNormalizePriority(v: any): number {
+const MARGIN_OPTIONS = [
+  { label: "25%",   value: 0.25  },
+  { label: "27.5%", value: 0.275 },
+  { label: "30%",   value: 0.30  },
+];
 
-  const s = String(v ?? "").trim().toUpperCase();
+const inp: React.CSSProperties = {
+  background: "#1A2A44", border: `1px solid ${BDR}`, borderRadius: 8,
+  color: TEXT, padding: "9px 14px", fontSize: 14, outline: "none",
+  width: "100%", boxSizing: "border-box",
+};
+const tdS: React.CSSProperties = { padding: "11px 14px", verticalAlign: "middle", fontSize: 14 };
 
-  if (!s) return 99;
-
-  if (s === "P0" || s === "0" || s.endsWith("_0")) return 0;
-
-  if (s === "P1" || s === "1" || s.endsWith("_1")) return 1;
-
-  if (s === "P2" || s === "2" || s.endsWith("_2")) return 2;
-
-  if (s === "P3" || s === "3" || s.endsWith("_3")) return 3;
-
-  if (s === "CRITICAL") return 0;
-
-  if (s === "HIGH") return 1;
-
-  if (s === "MED" || s === "MEDIUM") return 2;
-
-  if (s === "LOW") return 3;
-
-  return 99;
-
+function sar(n: number) {
+  return "SAR " + Math.round(n).toLocaleString("en-US");
 }
 
-function apTitle(r: any): string {
-
-  return String(r?.title ?? r?.gap ?? r?.name ?? r?.label ?? r?.owner ?? "Action Item");
-
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 style={{ margin: "0 0 16px", color: TEXT, fontSize: 15, fontWeight: 600,
+                 borderBottom: `1px solid ${BDR}`, paddingBottom: 10 }}>{children}</h3>
+  );
 }
 
-function apPriorityRaw(r: any): any {
-
-  return(r?.priority ?? r?.gapPriority ?? r?.prio ?? r?.severity ?? r?.risk ?? r?.level ?? null);
-
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", alignItems: "center",
+                  gap: 12, marginBottom: 12 }}>
+      <label style={{ color: MUTED, fontSize: 13 }}>{label}</label>
+      <div>{children}</div>
+    </div>
+  );
 }
 
-function apScore(r: any): number {
-
-  const n = Number(r?.score ?? r?.risk_score ?? r?.riskScore ?? r?.impact ?? r?.weight ?? r?.rank_score ?? 0);
-
-  return Number.isFinite(n) ? n : 0;
-
+function TierBtn({ value, active, onClick }: { value: number; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "8px 22px", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer",
+      border: active ? "none" : `1px solid ${BDR}`,
+      background: active ? "linear-gradient(135deg,#1B4FD8,#4A9EFF)" : "#1A2A44",
+      color: active ? "#fff" : MUTED,
+    }}>{value.toLocaleString()}</button>
+  );
 }
 
-function sortActionPlanRows(rows: any[], mode: ActionPlanSortMode): any[] {
-
-  const arr = Array.isArray(rows) ? [...rows] : [];
-
-  if (mode === "ORIGINAL") return arr;
-
-  if (mode === "TITLE_ASC") return arr.sort((a,b) => apTitle(a).localeCompare(apTitle(b)));
-
-  if (mode === "SCORE_DESC") return arr.sort((a,b) => apScore(b) - apScore(a));
-
-  // DEFAULT_P0: priority asc then score desc then title
-
-  return arr.sort((a,b) => {
-
-    const pa = apNormalizePriority(apPriorityRaw(a));
-
-    const pb = apNormalizePriority(apPriorityRaw(b));
-
-    if (pa !== pb) return pa - pb;
-
-    const sa = apScore(a);
-
-    const sb = apScore(b);
-
-    if (sa !== sb) return sb - sa;
-
-    return apTitle(a).localeCompare(apTitle(b));
-
-  });
-
+function MarginBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "7px 18px", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer",
+      border: active ? "none" : `1px solid ${BDR}`,
+      background: active ? "rgba(74,158,255,0.2)" : "#1A2A44",
+      color: active ? ACCENT : MUTED,
+    }}>{label}</button>
+  );
 }
 
-import ActionPlanTable, { type ActionPlanRow } from "../ui/components/ActionPlanTable";
-
-import { computeNormalizedQuote } from "../adapters/quoteAdapter";
-import SnapshotBar from "../ui/components/SnapshotBar";
-type ParseOk = { ok: true; value: any };
-
-type ParseErr = { ok: false; error: string };
-
-function safeParse(s: string): ParseOk | ParseErr {
-
-  try {
-
-    const v = JSON.parse(s);
-
-    if (!v || typeof v !== "object") return { ok: false, error: "JSON must be an object." };
-
-    return { ok: true, value: v };
-
-  } catch (e: any) {
-
-    return { ok: false, error: e?.message ? String(e.message) : "Invalid JSON." };
-
-  }
-
-}
-
-function formatSar(n: number | undefined | null) {
-
-  if (typeof n !== "number" || !Number.isFinite(n)) return "-";
-
-  try {
-
-    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
-
-  } catch {
-
-    return String(Math.round(n));
-
-  }
-
+interface LineItem { label: string; cost: number; note?: string }
+interface QuoteResult {
+  lines: LineItem[];
+  totalCost: number;
+  recommendedPrice: number;
+  profit: number;
+  marginPct: number;
+  pricePerDrone: number;
 }
 
 export default function QuoteCalc() {
+  const [tier,          setTier]          = useState<Tier>(1000);
+  const [costPerDrone,  setCostPerDrone]  = useState("450");
+  const [durationMin,   setDurationMin]   = useState("15");
+  const [travelZone,    setTravelZone]    = useState("LOCAL");
+  const [travelOverride,setTravelOverride]= useState("");
+  const [margin,        setMargin]        = useState(0.25);
+  const [permitFee,     setPermitFee]     = useState("5000");
+  const [accommodation, setAccommodation] = useState("3000");
+  const [tickets,       setTickets]       = useState("2000");
+  const [transport,     setTransport]     = useState("1500");
+  const [food,          setFood]          = useState("1000");
+  const [clientName,    setClientName]    = useState("");
+  const [showName,      setShowName]      = useState("");
+  const [quoteNotes,    setQuoteNotes]    = useState("");
 
-  // -------------------------
-
-  // Input + basic persistence
-
-  // -------------------------
-
-  const LAST_INPUT_KEY = "drones_calc_last_input_v1";
-
-  const [inputText, setInputText] = useState<string>(() => {
-
-    try {
-
-    return (
-    localStorage.getItem(LAST_INPUT_KEY) ??
-`{
-  "quote_id": "Q-UT",
-  "version": 1,
-  "requirements": {
-    "required_drones": 1000,
-    "risk_level": "LOW",
-    "permits_days_remaining": 14,
-    "prep_days": 3
-  },
-  "cost_inputs_sar": {
-    "variable_base": 0,
-    "transport": 0,
-    "crew": 0,
-    "site_ops": 0,
-    "other": 0
-  },
-  "manual_override": {
-    "enabled": false,
-    "notes": ""
-  }
-}`
-      );
-
-    } catch {
-
-      return "";
-
+  const travelCost = useMemo(() => {
+    if (travelOverride.trim() !== "") {
+      const n = parseFloat(travelOverride);
+      return Number.isFinite(n) ? n : TRAVEL_ZONES[travelZone].default;
     }
+    return TRAVEL_ZONES[travelZone].default;
+  }, [travelZone, travelOverride]);
 
-  });
+  const quote = useMemo((): QuoteResult => {
+    const cpd  = parseFloat(costPerDrone)  || 0;
+    const perm = parseFloat(permitFee)     || 0;
+    const acc  = parseFloat(accommodation) || 0;
+    const tix  = parseFloat(tickets)       || 0;
+    const trns = parseFloat(transport)     || 0;
+    const fd   = parseFloat(food)          || 0;
 
-  // Action Plan sorting (persisted)
+    const lines: LineItem[] = [
+      { label: "Drone Fleet Operation",   cost: tier * cpd,  note: `${tier.toLocaleString()} drones x SAR ${cpd.toLocaleString()} per unit` },
+      { label: "Travel & Mobilization",   cost: travelCost,  note: TRAVEL_ZONES[travelZone].label },
+      { label: "Permits & Regulatory",    cost: perm,        note: "Flat rate" },
+      { label: "Accommodation",           cost: acc,         note: "Flat rate" },
+      { label: "Tickets & Entry",         cost: tix,         note: "Flat rate" },
+      { label: "Ground Transportation",   cost: trns,        note: "Flat rate" },
+      { label: "Food & Per Diem",         cost: fd,          note: "Flat rate" },
+    ].filter(l => l.cost > 0);
 
-  
+    const totalCost        = lines.reduce((s, l) => s + l.cost, 0);
+    const recommendedPrice = totalCost / (1 - margin);
+    const profit           = recommendedPrice - totalCost;
+    const marginPct        = profit / recommendedPrice;
+    const pricePerDrone    = tier > 0 ? recommendedPrice / tier : 0;
 
-  const [actionPlanSortMode, setActionPlanSortMode] = useState<ActionPlanSortMode>(() => {
+    return { lines, totalCost, recommendedPrice, profit, marginPct, pricePerDrone };
+  }, [tier, costPerDrone, travelCost, travelZone, margin, permitFee, accommodation, tickets, transport, food]);
 
-    try {
-
-      const v = typeof window !== "undefined" ? window.localStorage.getItem(ACTIONPLAN_SORT_KEY) : null;
-
-      return (v as ActionPlanSortMode) || "DEFAULT_P0";
-
-    } catch {
-
-      return "DEFAULT_P0";
-
-    }
-
-  });
-
-  useEffect(() => {
-
-    try {
-
-      if (typeof window !== "undefined") window.localStorage.setItem(ACTIONPLAN_SORT_KEY, actionPlanSortMode);
-
-    } catch {}
-
-  }, [actionPlanSortMode]);
-
-const [error, setError] = useState<string>("");
-
-  const [result, setResult] = useState<any>(null);
-
-  
-
-  
-
-  
-
-  const [baselineResult, setBaselineResult] = useState<any>(null);
-
-  const [baselineAt, setBaselineAt] = useState<string>("");
-
-const [resolvedGapIds] = useState<string[]>([]);
-
-useEffect(() => {
-
-    (window as any).__dc_result = result;
-
-  }, [result]);
-
-// -------------------------
-
-  // Phase 2: commercial + filters
-
-  // -------------------------
-
-  const [targetMarginPct, setTargetMarginPct] = useState<number>(0.30);
-
-  const [proposedPriceSar, setProposedPriceSar] = useState<number | null>(null);
-
-  const [showBlockersOnly, setShowBlockersOnly] = useState<boolean>(false);
-
-  const [minSeverity, setMinSeverity] = useState<number>(3);
-
-  // -------------------------
-
-  // Phase 2: snapshots
-
-  // -------------------------
-
-  const SNAP_KEY = "drones_calc_snapshots_v1";
-
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>(() => {
-
-    try {
-
-      const raw = localStorage.getItem(SNAP_KEY);
-
-      const arr = raw ? JSON.parse(raw) : [];
-
-      return Array.isArray(arr) ? arr : [];
-
-    } catch {
-
-      return [];
-
-    }
-
-  });
-
-  const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null);
-
-  function persistSnapshots(next: SnapshotRecord[]) {
-
-    setSnapshots(next);
-
-    try {
-
-      localStorage.setItem(SNAP_KEY, JSON.stringify(next));
-
-    } catch {}
-
+  function handlePrint() {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const today = new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+    const qid   = "Q-" + Date.now().toString(36).toUpperCase().slice(-6);
+    const rows  = quote.lines.map(l =>
+      `<tr><td>${l.label}</td><td style="color:#555;font-size:12px">${l.note ?? ""}</td><td style="text-align:right;font-weight:600">SAR ${Math.round(l.cost).toLocaleString()}</td></tr>`
+    ).join("");
+    win.document.write(`<html><head><title>Quote</title>
+    <style>body{font-family:Arial,sans-serif;padding:40px;color:#111;font-size:14px}
+    h1{font-size:20px;margin-bottom:4px}.meta{color:#555;font-size:13px;margin-bottom:28px}
+    table{width:100%;border-collapse:collapse;margin-bottom:24px}
+    th{background:#1e2535;color:#fff;padding:9px 12px;text-align:left;font-size:12px;text-transform:uppercase}
+    td{padding:9px 12px;border-bottom:1px solid #e5e7eb}
+    .total-row td{font-weight:700;border-top:2px solid #111;border-bottom:none;font-size:15px}
+    .summary{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap}
+    .box{border:2px solid #1e2535;border-radius:8px;padding:16px 20px;min-width:140px}
+    .box-label{font-size:11px;text-transform:uppercase;color:#555;letter-spacing:.5px;margin-bottom:6px}
+    .box-value{font-size:22px;font-weight:700}
+    .notes{margin-top:32px;font-size:13px;color:#555;border-top:1px solid #ddd;padding-top:16px}
+    </style></head><body>
+    <h1>Drone Show Quote ${showName ? "-- " + showName : ""}</h1>
+    <div class="meta">
+      ${clientName ? "<b>Client:</b> " + clientName + " &nbsp;&middot;&nbsp;" : ""}
+      <b>Quote ID:</b> ${qid} &nbsp;&middot;&nbsp;
+      <b>Date:</b> ${today} &nbsp;&middot;&nbsp;
+      <b>Tier:</b> ${tier.toLocaleString()} drones &nbsp;&middot;&nbsp;
+      <b>Duration:</b> ${durationMin} min
+    </div>
+    <table>
+      <thead><tr><th>Item</th><th>Notes</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>${rows}
+        <tr class="total-row"><td colspan="2">Total Cost</td><td style="text-align:right">SAR ${Math.round(quote.totalCost).toLocaleString()}</td></tr>
+      </tbody>
+    </table>
+    <div class="summary">
+      <div class="box"><div class="box-label">Recommended Price</div><div class="box-value" style="color:#1B4FD8">SAR ${Math.round(quote.recommendedPrice).toLocaleString()}</div></div>
+      <div class="box"><div class="box-label">Gross Profit</div><div class="box-value" style="color:#16a34a">SAR ${Math.round(quote.profit).toLocaleString()}</div></div>
+      <div class="box"><div class="box-label">Margin</div><div class="box-value">${Math.round(quote.marginPct*100)}%</div></div>
+      <div class="box"><div class="box-label">Price / Drone</div><div class="box-value">SAR ${Math.round(quote.pricePerDrone).toLocaleString()}</div></div>
+    </div>
+    ${quoteNotes ? `<div class="notes"><b>Notes:</b> ${quoteNotes}</div>` : ""}
+    </body></html>`);
+    win.document.close(); win.print();
   }
 
-  function saveSnapshot(name: string) {
-
-    const payload = {
-
-      inputText,
-
-      targetMarginPct,
-
-      proposedPriceSar,
-
-      showBlockersOnly,
-
-      minSeverity,
-
-      lastResult: result,
-
-    };
-
-    const rec: SnapshotRecord = {
-
-      id:
-
-        "S-" +
-
-        new Date().toISOString().slice(0, 10).replace(/-/g, "") +
-
-        "-" +
-
-        Math.random().toString(16).slice(2, 8).toUpperCase(),
-
-      name,
-
-      created_at: new Date().toISOString(),
-
-      payload,
-
-    };
-
-    const next = [rec, ...snapshots].slice(0, 50);
-
-    persistSnapshots(next);
-
-    setActiveSnapshotId(rec.id);
-
-  }
-
-  function loadSnapshot(id: string) {
-
-    const rec = snapshots.find((s) => s.id === id);
-
-    if (!rec) return;
-
-    setActiveSnapshotId(rec.id);
-
-    const p = rec.payload || {};
-
-    if (typeof p.inputText === "string") setInputText(p.inputText);
-
-    if (typeof p.targetMarginPct === "number") setTargetMarginPct(p.targetMarginPct);
-
-    if (typeof p.proposedPriceSar === "number") setProposedPriceSar(p.proposedPriceSar);
-
-    if (typeof p.showBlockersOnly === "boolean") setShowBlockersOnly(p.showBlockersOnly);
-
-    if (typeof p.minSeverity === "number") setMinSeverity(p.minSeverity);
-
-    if (p.lastResult) setResult(p.lastResult);
-
-  }
-
-  function deleteSnapshot(id: string) {
-
-    const next = snapshots.filter((s) => s.id !== id);
-
-    persistSnapshots(next);
-
-    if (activeSnapshotId === id) setActiveSnapshotId(null);
-
-  }
-
-  function handleCompute() {
-
-    console.log("[QuoteCalc] Compute clicked");
-
-    const parsed = safeParse(inputText);
-
-    if (!parsed.ok) {
-
-      console.warn("[QuoteCalc] JSON parse failed:", parsed.error);
-
-      setError(parsed.error);
-
-      return;
-
-    }
-
-    setError("");
-
-    try {
-
-      // UI -> Adapter -> Engine ONLY
-
-      const norm = computeNormalizedQuote(parsed.value, {
-
-        target_margin_pct: targetMarginPct,
-
-        proposed_price_sar: typeof proposedPriceSar === "number" ? proposedPriceSar : undefined,
-
-      });
-
-      
-
-      console.log("[QuoteCalc] gaps_ranked:", norm?.gaps_ranked);
-
-      console.log("[QuoteCalc] gaps_ranked JSON:", JSON.stringify(norm?.gaps_ranked ?? [], null, 2));console.log("[QuoteCalc] computeNormalizedQuote ok:", norm);
-
-      setResult(norm);
-
-      // Capture baseline on first compute (or when baseline cleared)
-
-      if (!baselineResult) {
-
-        setBaselineResult(norm);
-
-        setBaselineAt(new Date().toISOString());
-
-      }
-
-      (window as any).__dc_result = norm;
-
-      try {
-
-        localStorage.setItem(LAST_INPUT_KEY, inputText);
-
-      } catch {}
-
-    } catch (e: any) {
-
-      console.error("[QuoteCalc] computeNormalizedQuote FAILED:", e);
-
-      const msg =
-
-        e && typeof e === "object" && "message" in e
-
-          ? String((e as any).message)
-
-          : typeof e === "string"
-
-          ? e
-
-          : "Compute failed (unknown error).";
-
-      setError(msg);
-
-    }
-
-  }
-
-  
-
-  const simulatedActionRows: ActionPlanRow[] = useMemo(() => {
-
-    if (!result) return [];
-
-    const baseRows: ActionPlanRow[] = (result?.action_plan ?? []) as ActionPlanRow[];
-
-    const filtered = baseRows
-
-      .filter(r => !resolvedGapIds.includes(r.id))
-
-      .filter(r => (r.severity ?? 3) >= minSeverity)
-
-      .filter(r => (showBlockersOnly ? Boolean(r.blocker) : true));
-
-return filtered;
-
-  }, [result, resolvedGapIds, minSeverity, showBlockersOnly]);
+  const COLORS = [ACCENT, ORANGE, GOLD, GREEN, "#A78BFA", "#F472B6", "#34D399"];
 
   return (
-
-    <Box sx={{ p: 3, maxWidth: 1200 }}>
-
-      <Typography variant="h4" sx={{ mb: 2 }}>
-
-        Operational Risk & Forecast Dashboard<span style={{ marginLeft: 10, fontSize: 12, padding: "2px 8px", borderRadius: 999, border: "1px solid #d0d7de", background: "#f6f8fa", display: "inline-block" }}>UI Polish</span>
-
-      </Typography>
-
-      <Paper variant="outlined" sx={{ p: 2 }}>
-
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>
-
-          Input (JSON)
-
-        </Typography>
-
-        <TextField
-
-          value={inputText}
-
-          onChange={(e) => setInputText(e.target.value)}
-
-          multiline
-
-          minRows={4}
-
-          fullWidth
-
-          sx={{ fontFamily: "monospace" }}
-
-        />
-
-        <Box sx={{ mt: 2, display: "flex", gap: 1.2, alignItems: { xs: "stretch", sm: "center" }, flexWrap: "wrap" }}>
-
-          <Button variant="contained" size="large" onClick={handleCompute} sx={{ px: 2.2, borderRadius: 2, textTransform: "none", width: { xs: "100%", sm: "auto" } }}>
-
-            Compute
-
-          </Button>
-
-          {error ? (
-
-            <Alert severity="error" sx={{ flex: 1, width: { xs: "100%", sm: "auto" } }}>
-
-              {error}
-
-            </Alert>
-
-          ) : null}
-
-        </Box>
-
-      </Paper>
-
-            <Paper variant="outlined" sx={{ mt: 2, p: 2 }}>
-
-        <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
-
-          Workflow
-
-        </Typography>
-
-        <Typography variant="body2" sx={{ opacity: 0.85 }}>
-
-          1) Compute Baseline {"\u2192"} 2) Simulate resolved gaps {"\u2192"} 3) Review the delta below.
-
-          Simulation currently affects <b>readiness + blockers + action plan</b> (not MSQ/price yet).
-
-        </Typography>
-
-        <Box sx={{ mt: 1.2, display: "flex", gap: 2, flexWrap: "wrap" }}>
-
-          <Typography variant="subtitle2" sx={{ mt: 0.4 }}>
-
-            <b>Baseline:</b> {baselineAt ? baselineAt.replace("T"," ").slice(0,19) : "Not computed"}
-
-          </Typography>
-
-          <Typography variant="subtitle2" sx={{ mt: 0.4 }}>
-
-            <b>Simulation active:</b> {resolvedGapIds.length ? "Yes" : "No"}
-
-          </Typography>
-
-          <Typography variant="subtitle2" sx={{ mt: 0.4 }}>
-
-            <b>Resolved gaps:</b> {resolvedGapIds.length}
-
-          </Typography>
-
-        </Box>
-
-        {baselineResult ? (
-
-          <Box sx={{ mt: 1.4, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" }, gap: 1.2 }}>
-
-            <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 2, bgcolor: "background.paper" }}>
-
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>Readiness</Typography>
-
-              <Typography variant="subtitle2" sx={{ mt: 0.4 }}>
-
-                {(baselineResult?.readiness ?? "-")} {"\u2192"} {(simulatedActionRows.some(r => r.blocker) ? "NOT_READY" : "READY")}
-
-              </Typography>
-
-            </Paper>
-
-            <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 2, bgcolor: "background.paper" }}>
-
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>Blockers</Typography>
-
-              <Typography variant="body2">
-
-                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.filter((r:any)=>r.blocker).length : "-")}
-
-                {" -> "}
-
-                {simulatedActionRows.filter(r => r.blocker).length}
-
-              </Typography>
-
-            </Paper>
-
-            <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 2, bgcolor: "background.paper" }}>
-
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>Action items</Typography>
-
-              <Typography variant="body2">
-
-                {(Array.isArray(baselineResult?.action_plan) ? baselineResult.action_plan.length : "-")}
-
-                {" -> "}
-
-                {simulatedActionRows.length}
-
-              </Typography>
-
-            </Paper>
-
-            <Paper variant="outlined" sx={{ p: 1.4, borderRadius: 2, bgcolor: "background.paper" }}>
-
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>Note</Typography>
-
-              <Typography variant="body2">MSQ/Price unchanged (simulation-only)</Typography>
-
-            </Paper>
-
-          </Box>
-
-        ) : null}
-
-      </Paper>
-
-<Box sx={{ mt: 2 }}>
-
-        <Paper elevation={2} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-
-          <KpiStrip
-
-          readiness={(simulatedActionRows.some(r => r.blocker) ? 'NOT_READY' : 'READY')}
-
-          msqSar={result?.msq_sar}
-
-          proposedPriceSar={result?.proposed_price_sar}
-
-          marginGapSar={result?.margin_gap_sar}
-
-          formatSar={formatSar}
-
-        />
-
-        </Paper>
-
-      </Box>
-
-      <Box sx={{ mt: 2 }}>
-
-        <SnapshotBar
-
-          snapshots={snapshots}
-
-          activeId={activeSnapshotId}
-
-          onSave={(name: string) => saveSnapshot(name)}
-
-          onLoad={(id: string) => loadSnapshot(id)}
-
-          onDelete={(id: string) => deleteSnapshot(id)}
-
-        />
-
-      </Box>
-
-      <Paper variant="outlined" sx={{ mt: 2, p: 2 }}>
-
-        <Typography variant="subtitle2" sx={{ opacity: 0.85, mb: 1 }}>
-
-          Controls
-
-        </Typography>
-
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-
-          <TextField
-
-            size="small"
-
-            label="Target margin (0-0.9)"
-
-            type="number"
-
-            inputProps={{ min: 0, max: 0.9, step: 0.05 }}
-
-            value={targetMarginPct}
-
-            onChange={(e) => {
-
-              const n = Number(e.target.value);
-
-              const v = Number.isFinite(n) ? Math.max(0, Math.min(0.9, n)) : 0.30;
-
-              setTargetMarginPct(v);
-
-            }}
-
-            sx={{ width: 220 }}
-
-          />
-
-          <TextField
-
-            size="small"
-
-            label="Proposed price override (SAR)"
-
-            type="number"
-
-            value={proposedPriceSar ?? ""}
-
-            onChange={(e) => {
-
-              const t = String(e.target.value ?? "").trim();
-
-              if (!t) {
-
-                setProposedPriceSar(null);
-
-                return;
-
-              }
-
-              const n = Number(t);
-
-              setProposedPriceSar(Number.isFinite(n) ? n : null);
-
-            }}
-
-            sx={{ width: 280 }}
-
-            helperText="Leave empty to use adapter suggested price"
-
-          />
-
-        </Box>
-
-        <Box sx={{ mt: 2 }}>
-
-          <FiltersBar
-
-            showBlockersOnly={showBlockersOnly}
-
-            onToggleBlockersOnly={setShowBlockersOnly}
-
-            minSeverity={minSeverity}
-
-            onMinSeverity={setMinSeverity}
-
-          />
-
-        </Box>
-
-      </Paper>
-
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
-
-            <Typography variant="subtitle2" sx={{ opacity: 0.85 }}>Action Plan</Typography>
-
-            <TextField
-
-              select
-
-              size="small"
-
-              value={actionPlanSortMode}
-
-              onChange={(e) => setActionPlanSortMode(e.target.value as ActionPlanSortMode)}
-
-              label="Sort"
-
-              aria-label="Action Plan sort"
-
-              sx={{ minWidth: 220 }}
-
-            >
-
-              <MenuItem value="DEFAULT_P0">Default (P0 first)</MenuItem>
-
-              <MenuItem value="SCORE_DESC">Score (high {"\u2192"} low)</MenuItem>
-
-              <MenuItem value="TITLE_ASC">Title (A {"\u2192"} Z)</MenuItem>
-
-              <MenuItem value="ORIGINAL">Original</MenuItem>
-
-            </TextField>
-
-          </Box>
-
-      <ActionPlanTable rows={sortActionPlanRows(simulatedActionRows, actionPlanSortMode)} />
-
-    </Box>
-
+    <div style={{ maxWidth: 920, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, color: TEXT, fontWeight: 700, fontSize: 22 }}>Quote Builder</h1>
+          <p style={{ margin: "4px 0 0", color: MUTED, fontSize: 13 }}>
+            Estimate show price based on drone tier, costs, and target margin
+          </p>
+        </div>
+        <button onClick={handlePrint} style={{
+          background: "rgba(74,158,255,0.12)", border: "1px solid rgba(74,158,255,0.3)",
+          borderRadius: 8, color: ACCENT, padding: "8px 18px",
+          fontSize: 13, fontWeight: 600, cursor: "pointer",
+        }}>Print Quote</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16, alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
+            <SectionTitle>Quote Info</SectionTitle>
+            <Row label="Client Name">
+              <input value={clientName} onChange={e => setClientName(e.target.value)}
+                placeholder="e.g. Riyadh Municipality" style={inp} />
+            </Row>
+            <Row label="Show Name">
+              <input value={showName} onChange={e => setShowName(e.target.value)}
+                placeholder="e.g. National Day Show 2026" style={inp} />
+            </Row>
+            <Row label="Duration (minutes)">
+              <input type="number" value={durationMin} onChange={e => setDurationMin(e.target.value)}
+                style={{ ...inp, width: 120 }} min="1" max="120" />
+            </Row>
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
+            <SectionTitle>Drone Tier</SectionTitle>
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              {TIERS.map(t => (
+                <TierBtn key={t} value={t} active={tier === t} onClick={() => setTier(t as Tier)} />
+              ))}
+            </div>
+            <Row label="Cost per Drone (SAR)">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="number" value={costPerDrone} onChange={e => setCostPerDrone(e.target.value)}
+                  style={{ ...inp, width: 140 }} min="0" step="10" />
+                <span style={{ color: MUTED, fontSize: 12 }}>
+                  = {sar(tier * (parseFloat(costPerDrone) || 0))} total
+                </span>
+              </div>
+            </Row>
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
+            <SectionTitle>Travel & Mobilization</SectionTitle>
+            <Row label="Travel Zone">
+              <select value={travelZone}
+                onChange={e => { setTravelZone(e.target.value); setTravelOverride(""); }}
+                style={inp}>
+                {Object.entries(TRAVEL_ZONES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </Row>
+            <Row label="Travel Cost (SAR)">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="number"
+                  value={travelOverride !== "" ? travelOverride : TRAVEL_ZONES[travelZone].default}
+                  onChange={e => setTravelOverride(e.target.value)}
+                  style={{ ...inp, width: 140 }} min="0" step="500" />
+                {travelOverride !== "" ? (
+                  <button onClick={() => setTravelOverride("")} style={{
+                    background: "none", border: `1px solid ${BDR}`, borderRadius: 6,
+                    color: MUTED, padding: "4px 10px", fontSize: 12, cursor: "pointer",
+                  }}>Reset</button>
+                ) : (
+                  <span style={{ color: MUTED, fontSize: 12 }}>default</span>
+                )}
+              </div>
+            </Row>
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
+            <SectionTitle>Flat Rate Line Items (SAR)</SectionTitle>
+            {([
+              { label: "Permits & Regulatory", value: permitFee,     setter: setPermitFee     },
+              { label: "Accommodation",         value: accommodation, setter: setAccommodation },
+              { label: "Tickets & Entry",       value: tickets,       setter: setTickets       },
+              { label: "Ground Transportation", value: transport,     setter: setTransport     },
+              { label: "Food & Per Diem",       value: food,          setter: setFood          },
+            ] as { label: string; value: string; setter: (v: string) => void }[]).map(item => (
+              <Row key={item.label} label={item.label}>
+                <input type="number" value={item.value}
+                  onChange={e => item.setter(e.target.value)}
+                  style={{ ...inp, width: 140 }} min="0" step="500" />
+              </Row>
+            ))}
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "20px 24px" }}>
+            <SectionTitle>Notes</SectionTitle>
+            <textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
+              placeholder="Additional terms, assumptions, or scope notes..."
+              style={{ ...inp, height: 80, resize: "vertical" as const }} />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 16 }}>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "16px 20px" }}>
+            <div style={{ color: MUTED, fontSize: 12, fontWeight: 600, textTransform: "uppercase",
+                          letterSpacing: 0.5, marginBottom: 10 }}>Target Margin</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {MARGIN_OPTIONS.map(m => (
+                <MarginBtn key={m.value} label={m.label} active={margin === m.value}
+                  onClick={() => setMargin(m.value)} />
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background: "linear-gradient(135deg,#0D2347,#1B4FD8)",
+                        border: "1px solid rgba(74,158,255,0.3)", borderRadius: 12,
+                        padding: "20px 22px", textAlign: "center" as const }}>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, textTransform: "uppercase",
+                          letterSpacing: 0.8, marginBottom: 8 }}>Recommended Sell Price</div>
+            <div style={{ color: "#fff", fontSize: 28, fontWeight: 800, marginBottom: 4 }}>
+              {sar(quote.recommendedPrice)}
+            </div>
+            <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+              at {Math.round(margin * 100)}% margin
+            </div>
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "16px 20px" }}>
+            {[
+              { label: "Total Cost",    value: sar(quote.totalCost),                    color: TEXT  },
+              { label: "Gross Profit",  value: sar(quote.profit),                       color: GREEN },
+              { label: "Margin",        value: Math.round(quote.marginPct * 100) + "%", color: ACCENT },
+              { label: "Price / Drone", value: sar(quote.pricePerDrone),                color: GOLD  },
+            ].map(k => (
+              <div key={k.label} style={{ display: "flex", justifyContent: "space-between",
+                                          alignItems: "center", padding: "8px 0",
+                                          borderBottom: `1px solid ${BDR}` }}>
+                <span style={{ color: MUTED, fontSize: 13 }}>{k.label}</span>
+                <span style={{ color: k.color, fontWeight: 700, fontSize: 15 }}>{k.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "16px 20px" }}>
+            <div style={{ color: MUTED, fontSize: 12, fontWeight: 600, textTransform: "uppercase",
+                          letterSpacing: 0.5, marginBottom: 12 }}>Cost Breakdown</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: TEXT }}>
+              <tbody>
+                {quote.lines.map(l => (
+                  <tr key={l.label} style={{ borderBottom: `1px solid ${BDR}` }}>
+                    <td style={{ ...tdS, padding: "7px 0", color: TEXT }}>{l.label}</td>
+                    <td style={{ ...tdS, padding: "7px 0", textAlign: "right" as const,
+                                  fontWeight: 600, color: ACCENT, whiteSpace: "nowrap" as const }}>
+                      {sar(l.cost)}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ padding: "10px 0", fontWeight: 700, color: TEXT, fontSize: 14 }}>Total</td>
+                  <td style={{ padding: "10px 0", textAlign: "right" as const,
+                                fontWeight: 800, color: TEXT, fontSize: 14 }}>
+                    {sar(quote.totalCost)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {quote.totalCost > 0 && (
+            <div style={{ background: CARD, border: `1px solid ${BDR}`, borderRadius: 12, padding: "16px 20px" }}>
+              <div style={{ color: MUTED, fontSize: 12, fontWeight: 600, textTransform: "uppercase",
+                            letterSpacing: 0.5, marginBottom: 10 }}>Cost Split</div>
+              <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", height: 10, marginBottom: 10 }}>
+                {quote.lines.map((l, i) => (
+                  <div key={l.label} style={{
+                    width: ((l.cost / quote.totalCost) * 100) + "%",
+                    background: COLORS[i % COLORS.length],
+                  }} />
+                ))}
+              </div>
+              {quote.lines.map((l, i) => (
+                <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0,
+                                background: COLORS[i % COLORS.length] }} />
+                  <span style={{ color: MUTED, fontSize: 11, flex: 1 }}>{l.label}</span>
+                  <span style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>
+                    {Math.round((l.cost / quote.totalCost) * 100)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
-
 }
-
