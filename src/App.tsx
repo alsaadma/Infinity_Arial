@@ -16,6 +16,7 @@ const Allocations = React.lazy(() => import("./pages/Allocations"));
 const Costing    = React.lazy(() => import("./pages/Costing"));
 const Readiness  = React.lazy(() => import("./pages/Readiness"));
 const Help       = React.lazy(() => import("./pages/Help"));
+const Careers  = React.lazy(() => import("./pages/Careers"));
 
 const NAV = [
   { to: "/command",       label: "Command"       },
@@ -32,6 +33,7 @@ const NAV = [
   { to: "/utilization",   label: "Utilization"   },
   { to: "/reports",       label: "Reports"       },
   { to: "/maintenance",  label: "Maintenance"  },
+  { to: "/careers",     label: "Careers"      },
   { to: "/help",          label: "Info Center"  },
 ];
 
@@ -117,6 +119,7 @@ export default function App() {
             <Route path="/costing"     element={<Costing />} />
             <Route path="/readiness"     element={<Readiness />} />
             <Route path="/utilization"   element={<Utilization />} />
+            <Route path="/careers"     element={<Careers />} />
             <Route path="/help"         element={<React.Suspense fallback={null}><Help /></React.Suspense>} />
           <Route path="/reports"       element={<Reporting />} />
             <Route path="/maintenance"   element={<Maintenance />} />

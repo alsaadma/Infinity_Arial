@@ -96,6 +96,7 @@ async function main() {
   app.register(utilizationRoutes);
   app.register(require('./routes/reporting.cjs'));
   app.register(require('./routes/maintenance-schedule.cjs'));
+  app.register(require('./routes/careers.cjs'));
 
   await app.listen({ host, port });
   console.log(`DC backend listening on http://${host}:${port}`);
