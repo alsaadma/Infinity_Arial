@@ -137,11 +137,11 @@ function DronesTab() {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, opacity: 0.6 }}>Status</label>
           <select value={status} onChange={e => setStatus(e.target.value as DroneStatus)}
-            style={inputStyle}>
-            <option>ACTIVE</option>
-            <option>MAINTENANCE</option>
-            <option>QUARANTINED</option>
-            <option>RETIRED</option>
+            style={{ ...inputStyle, color: "#fff", backgroundColor: "#1a2744" }}>
+            <option style={{ color: "#22c55e" }}>ACTIVE</option>
+            <option style={{ color: "#f97316" }}>MAINTENANCE</option>
+            <option style={{ color: "#ef4444" }}>QUARANTINED</option>
+            <option style={{ color: "#666" }}>RETIRED</option>
           </select>
         </div>
         <button onClick={addDrone} disabled={adding} style={btnStyle}>
@@ -172,7 +172,13 @@ function DronesTab() {
             </thead>
             <tbody>
               {drones.map(d => (
-                <tr key={d.id} style={{ transition: "background 0.15s" }}>
+                <tr key={d.id} style={{ 
+                  transition: "background 0.15s",
+                  background: d.status === "RETIRED" ? "rgba(120,120,120,0.2)" 
+                            : d.status === "MAINTENANCE" ? "rgba(255,152,0,0.15)" 
+                            : "transparent",
+                  opacity: d.status === "RETIRED" ? 0.6 : 1
+                }}>
                   <td style={cell}>{d.serial_number ?? <span style={{ opacity: 0.4 }}>—</span>}</td>
                   <td style={cell}>{d.model_id ?? <span style={{ opacity: 0.4 }}>—</span>}</td>
                   <td style={cell}><StatusBadge status={d.status} /></td>
