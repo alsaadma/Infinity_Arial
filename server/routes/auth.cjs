@@ -11,6 +11,7 @@ const path     = require("node:path");
 const crypto   = require("node:crypto");
 const Database = require("better-sqlite3");
 const { createToken, validateToken, revokeToken } = require("../tokenStore.cjs");
+const { logAudit } = require("../auditLog.cjs");
 
 const DB_PATH = path.join(__dirname, "..", "data", "drones_calc.sqlite");
 
@@ -71,14 +72,49 @@ module.exports = async function authRoutes(fastify) {
       return reply.code(401).send({ ok: false, error: "Invalid credentials" });
 
     const token = createToken(user.id, user.role, user.email);
+
+    // Update last_login timestamp
+    try { db.prepare("UPDATE app_user SET updated_at = datetime('now') WHERE id = ?").run(user.id); } catch {}
+
+    logAudit(db, {
+      userId: user.id, userEmail: user.email, action: "LOGIN",
+      module: "auth", ip: req.ip
+    });
+
     return { ok: true, token, role: user.role, email: user.email, name: user.name };
   });
 
   fastify.post("/api/auth/logout", async function (req) {
     const auth  = String(req.headers["authorization"] || "");
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const sess = validateToken(token);
     revokeToken(token);
+
+    if (sess) {
+      logAudit(db, {
+        userId: sess.userId, userEmail: sess.email, action: "LOGOUT",
+        module: "auth", ip: req.ip
+      });
+    }
+
     return { ok: true };
+  });
+
+  
+  fastify.get("/api/auth/permissions", async function (req, reply) {
+    const auth  = String(req.headers["authorization"] || "");
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const sess  = validateToken(token);
+    if (!sess) return reply.code(401).send({ ok: false, error: "Not authenticated" });
+    const perms = db.prepare(
+      "SELECT page_key, can_view, can_edit FROM role_permission WHERE role = ? ORDER BY page_key"
+    ).all(sess.role);
+    const items = perms.map(p => ({
+      page_key: p.page_key,
+      can_view: !!p.can_view,
+      can_edit: !!p.can_edit,
+    }));
+    return { ok: true, items };
   });
 
   fastify.get("/api/auth/me", async function (req, reply) {

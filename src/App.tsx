@@ -18,23 +18,27 @@ const Readiness  = React.lazy(() => import("./pages/Readiness"));
 const Help       = React.lazy(() => import("./pages/Help"));
 const Careers  = React.lazy(() => import("./pages/Careers"));
 
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+const Login = React.lazy(() => import("./pages/Login"));
+
 const NAV = [
-  { to: "/command",       label: "Command"       },
-  { to: "/quote-builder", label: "Quote Builder" },
-  { to: "/fleet",         label: "Fleet"         },
-  { to: "/calendar",      label: "Calendar"      },
-  { to: "/assets",        label: "Assets"        },
-  { to: "/shows",         label: "Shows"         },
-  { to: "/permits",       label: "Permits"       },
-  { to: "/sites",         label: "Sites"         },
-  { to: "/allocations",   label: "Allocations"   },
-  { to: "/costing",       label: "Costing"       },
-  { to: "/readiness",     label: "Readiness"     },
-  { to: "/utilization",   label: "Utilization"   },
-  { to: "/reports",       label: "Reports"       },
-  { to: "/maintenance",  label: "Maintenance"  },
-  { to: "/careers",     label: "Careers"      },
-  { to: "/help",          label: "Info Center"  },
+  { to: "/command",       label: "Command",       pageKey: "command" },
+  { to: "/quote-builder", label: "Quote Builder", pageKey: "quote-builder" },
+  { to: "/fleet",         label: "Fleet",         pageKey: "assets" },
+  { to: "/calendar",      label: "Calendar",      pageKey: "calendar" },
+  { to: "/assets",        label: "Assets",        pageKey: "assets" },
+  { to: "/shows",         label: "Shows",         pageKey: "shows" },
+  { to: "/permits",       label: "Permits",       pageKey: "permits" },
+  { to: "/sites",         label: "Sites",         pageKey: "permits" },
+  { to: "/allocations",   label: "Allocations",   pageKey: "shows" },
+  { to: "/costing",       label: "Costing",       pageKey: "costing" },
+  { to: "/readiness",     label: "Readiness",     pageKey: "readiness" },
+  { to: "/utilization",   label: "Utilization",   pageKey: "utilization" },
+  { to: "/reports",       label: "Reports",       pageKey: "reporting" },
+  { to: "/maintenance",   label: "Maintenance",   pageKey: "assets" },
+  { to: "/careers",       label: "Careers",       pageKey: "command" },
+  { to: "/help",          label: "Info Center",   pageKey: "help" },
 ];
 
 const SIDEBAR_W = 200;
@@ -67,7 +71,75 @@ function NavLink({ to, label }: { to: string; label: string }) {
   );
 }
 
+
+function FilteredNav() {
+  const { canView } = useAuth();
+  return (
+    <>
+      {NAV.filter(n => canView(n.pageKey)).map(n => <NavLink key={n.to} to={n.to} label={n.label} />)}
+    </>
+  );
+}
+
+function LogoutButton() {
+  const { user, logout } = useAuth();
+  if (!user) return null;
+  return (
+    <div style={{
+      padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.08)",
+      display: "flex", flexDirection: "column", gap: 6, flexShrink: 0,
+    }}>
+      <div style={{ fontSize: 11, opacity: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {user.email}
+      </div>
+      <div style={{ fontSize: 10, opacity: 0.4, textTransform: "uppercase", letterSpacing: 1 }}>
+        {user.role}
+      </div>
+      <button onClick={logout} style={{
+        marginTop: 4, padding: "6px 0", borderRadius: 6, border: "1px solid rgba(255,80,80,0.3)",
+        background: "rgba(255,80,80,0.08)", color: "#FF6B6B", fontSize: 12, fontWeight: 500,
+        cursor: "pointer",
+      }}>
+        Sign Out
+      </button>
+    </div>
+  );
+}
+
+function RP({ pageKey, children }: { pageKey: string; children: React.ReactNode }) {
+  return <ProtectedRoute pageKey={pageKey}>{children}</ProtectedRoute>;
+}
+
 export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  );
+}
+
+function AppShell() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0B1628", color: "#F0F4FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ opacity: 0.6 }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <React.Suspense fallback={<div style={{ padding: 16, opacity: 0.6 }}>Loading...</div>}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </React.Suspense>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#0B1628", color: "#F0F4FF", display: "flex" }}>
 
@@ -91,8 +163,9 @@ export default function App() {
         </div>
         {/* Nav links */}
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, padding: "12px 8px", flex: 1 }}>
-          {NAV.map(n => <NavLink key={n.to} to={n.to} label={n.label} />)}
+          <FilteredNav />
         </nav>
+        <LogoutButton />
       </aside>
 
       {/* ── Main content ── */}
@@ -101,23 +174,23 @@ export default function App() {
         <React.Suspense fallback={<div style={{ padding: 16, opacity: 0.6 }}>Loading...</div>}>
           <Routes>
             <Route path="/"              element={<Navigate to="/command" replace />} />
-            <Route path="/command"       element={<Command />} />
-            <Route path="/quote-builder" element={<QuoteCalc />} />
+            <Route path="/command"       element={<RP pageKey="command"><Command /></RP>} />
+            <Route path="/quote-builder" element={<RP pageKey="quote-builder"><QuoteCalc /></RP>} />
             <Route path="/quote-calc"    element={<Navigate to="/quote-builder" replace />} />
-            <Route path="/fleet"         element={<Fleet />} />
-            <Route path="/calendar"      element={<Calendar />} />
-            <Route path="/assets"        element={<Assets />} />
-            <Route path="/shows"         element={<Shows />} />
-            <Route path="/permits"       element={<Permits />} />
-            <Route path="/sites"         element={<Sites />} />
-            <Route path="/allocations" element={<Allocations />} />
-            <Route path="/costing"     element={<Costing />} />
-            <Route path="/readiness"     element={<Readiness />} />
-            <Route path="/utilization"   element={<Utilization />} />
-            <Route path="/careers"     element={<Careers />} />
-            <Route path="/help"         element={<React.Suspense fallback={null}><Help /></React.Suspense>} />
-          <Route path="/reports"       element={<Reporting />} />
-            <Route path="/maintenance"   element={<Maintenance />} />
+            <Route path="/fleet"         element={<RP pageKey="assets"><Fleet /></RP>} />
+            <Route path="/calendar"      element={<RP pageKey="calendar"><Calendar /></RP>} />
+            <Route path="/assets"        element={<RP pageKey="assets"><Assets /></RP>} />
+            <Route path="/shows"         element={<RP pageKey="shows"><Shows /></RP>} />
+            <Route path="/permits"       element={<RP pageKey="permits"><Permits /></RP>} />
+            <Route path="/sites"         element={<RP pageKey="permits"><Sites /></RP>} />
+            <Route path="/allocations" element={<RP pageKey="shows"><Allocations /></RP>} />
+            <Route path="/costing"     element={<RP pageKey="costing"><Costing /></RP>} />
+            <Route path="/readiness"     element={<RP pageKey="readiness"><Readiness /></RP>} />
+            <Route path="/utilization"   element={<RP pageKey="utilization"><Utilization /></RP>} />
+            <Route path="/careers"     element={<RP pageKey="command"><Careers /></RP>} />
+            <Route path="/help"         element={<RP pageKey="help"><React.Suspense fallback={null}><Help /></React.Suspense></RP>} />
+          <Route path="/reports"       element={<RP pageKey="reporting"><Reporting /></RP>} />
+            <Route path="/maintenance"   element={<RP pageKey="assets"><Maintenance /></RP>} />
             <Route path="*"              element={<Placeholder title="Not Found" note="Route does not exist." />} />
           </Routes>
         </React.Suspense>
