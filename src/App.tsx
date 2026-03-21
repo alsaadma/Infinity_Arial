@@ -129,6 +129,17 @@ function AppShell() {
     );
   }
 
+  const storedToken = (() => { try { return localStorage.getItem("dc_auth_token"); } catch { return null; } })();
+
+  if (!user && storedToken && loading) {
+    // Token exists but user not loaded yet — keep showing spinner, not Login
+    return (
+      <div style={{ minHeight: "100vh", background: "#0B1628", color: "#F0F4FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ opacity: 0.6 }}>Restoring session...</div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <React.Suspense fallback={<div style={{ padding: 16, opacity: 0.6 }}>Loading...</div>}>

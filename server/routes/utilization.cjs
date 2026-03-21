@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 const Database = require('better-sqlite3');
 const path     = require('path');
 
@@ -127,4 +127,80 @@ module.exports = async function utilizationRoutes(app) {
       try { db.close(); } catch(_) {}
     }
   });
+  // GET /api/utilization/show/:showId
+  app.get('/api/utilization/show/:showId', async function(req, _reply) {
+    const { showId } = req.params;
+    const db = openDb();
+    try {
+      const show = db.prepare(
+        'SELECT id, name, date, drones_required, status FROM show_event WHERE id = ?'
+      ).get(showId);
+      if (!show) return { ok: false, error: 'Show not found' };
+
+      // Fleet snapshot
+      const activeCount = db.prepare(
+        "SELECT COUNT(*) as n FROM drone_unit WHERE status = 'ACTIVE'"
+      ).get().n || 0;
+
+      const totalCount = db.prepare(
+        'SELECT COUNT(*) as n FROM drone_unit'
+      ).get().n || 0;
+
+      // Concurrent demand on same date (all other non-cancelled shows on same date)
+      const concurrentDemand = db.prepare(
+        "SELECT COALESCE(SUM(drones_required),0) as total FROM show_event " +
+        "WHERE date = ? AND id != ? AND status NOT IN ('CANCELLED','COMPLETED')"
+      ).get(show.date, showId).total || 0;
+
+      const totalDemandOnDate = show.drones_required + concurrentDemand;
+      const surplus = activeCount - totalDemandOnDate;
+      const utilizationPct = activeCount > 0
+        ? Math.min(Math.round((totalDemandOnDate / activeCount) * 100), 9999)
+        : 0;
+
+      // Battery estimate: each drone needs 1 battery per ~15min flight
+      // Conservative: 4 batteries per drone for a standard show
+      const batteriesNeeded = show.drones_required * 4;
+      const activeBatteries = db.prepare(
+        "SELECT COUNT(*) as n FROM battery_unit WHERE status = 'ACTIVE'"
+      ).get().n || 0;
+      const batterySurplus = activeBatteries - batteriesNeeded;
+
+      // Battery stress: avg cycle usage of active batteries
+      const stressRow = db.prepare(
+        "SELECT AVG(CAST(cycle_count AS REAL) / NULLIF(cycle_max, 0)) * 100 AS s " +
+        "FROM battery_unit WHERE status = 'ACTIVE' AND cycle_max > 0"
+      ).get();
+      const batteryStressPct = stressRow.s != null
+        ? Math.round(stressRow.s * 10) / 10
+        : null;
+
+      // Cycles that will be consumed: 4 cycles per drone (1 per battery per flight)
+      const cyclesConsumed = show.drones_required * 4;
+
+      return {
+        ok: true,
+        show: { id: show.id, name: show.name, date: show.date,
+                drones_required: show.drones_required, status: show.status },
+        fleet: {
+          active_drones:     activeCount,
+          total_drones:      totalCount,
+          drones_required:   show.drones_required,
+          concurrent_demand: concurrentDemand,
+          total_demand_date: totalDemandOnDate,
+          surplus:           surplus,
+          utilization_pct:   utilizationPct,
+          overbooked:        surplus < 0,
+        },
+        batteries: {
+          active_batteries: activeBatteries,
+          batteries_needed: batteriesNeeded,
+          battery_surplus:  batterySurplus,
+          stress_pct:       batteryStressPct,
+          cycles_consumed:  cyclesConsumed,
+        },
+      };
+    } finally { try { db.close(); } catch(_) {} }
+  });
+
 };

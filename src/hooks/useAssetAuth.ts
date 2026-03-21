@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 export interface AssetSession {
   token: string;
@@ -7,30 +7,23 @@ export interface AssetSession {
   name: string;
 }
 
+// Bridge hook: delegates entirely to the global AuthContext.
+// Pages that use useAssetAuth() will now share the app-level session —
+// no separate login prompt needed.
 export function useAssetAuth() {
-  const [session, setSession] = useState<AssetSession | null>(null);
+  const { user, token, login: ctxLogin, logout: ctxLogout } = useAuth();
 
-  const login = useCallback(async (email: string, password: string) => {
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSession({ token: data.token, role: data.role,
-                     email: data.email, name: data.name });
-        return { ok: true as const };
-      }
-      return { ok: false as const, error: (data.error as string) ?? "Login failed" };
-    } catch {
-      return { ok: false as const, error: "Server unreachable — is the backend running?" };
-    }
-  }, []);
+  const session: AssetSession | null = (user && token)
+    ? { token, role: user.role, email: user.email, name: user.name ?? "" }
+    : null;
 
-  const logout = useCallback(() => setSession(null), []);
+  const login = async (email: string, password: string) => {
+    const ok = await ctxLogin(email, password);
+    if (ok) return { ok: true as const };
+    return { ok: false as const, error: "Login failed" };
+  };
+
+  const logout = () => ctxLogout();
 
   return { session, login, logout };
 }
-

@@ -1,22 +1,17 @@
-import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-
 interface Props {
   pageKey: string;
   children: React.ReactNode;
 }
-
 export default function ProtectedRoute({ pageKey, children }: Props) {
   const { user, loading, canView } = useAuth();
-
   if (loading) {
-    return <div style={{ padding: 32, opacity: 0.6 }}>Checking access...</div>;
+    return <div style={{ padding: 32, opacity: 0.6 }}>Loading page...</div>;
   }
-
+  // Auth redirect is handled by AppShell — we only check page permission here
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return null;
   }
-
   if (!canView(pageKey)) {
     return (
       <div style={{ padding: 32, textAlign: "center" }}>
@@ -27,6 +22,5 @@ export default function ProtectedRoute({ pageKey, children }: Props) {
       </div>
     );
   }
-
   return <>{children}</>;
 }

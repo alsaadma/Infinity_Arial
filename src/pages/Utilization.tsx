@@ -34,6 +34,102 @@ function UtilBar({ pct, overbooked }: { pct: number; overbooked: boolean }) {
   );
 }
 
+
+// ── Per-Show Utilization Snapshot (Module 7 addition) ───────────────────────
+interface ShowUtilSnap {
+  ok: boolean;
+  show: { id: string; name: string; date: string; drones_required: number; status: string };
+  fleet: { active_drones: number; drones_required: number; concurrent_demand: number;
+           surplus: number; utilization_pct: number; overbooked: boolean };
+  batteries: { active_batteries: number; batteries_needed: number; battery_surplus: number;
+               stress_pct: number | null; cycles_consumed: number };
+}
+interface ShowOption { id: string; name: string; date: string }
+
+function PerShowSnapshot() {
+  const [shows,   setShows]   = useState<ShowOption[]>([]);
+  const [showId,  setShowId]  = useState("");
+  const [data,    setData]    = useState<ShowUtilSnap | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/shows").then(r => r.json()).then(d => {
+      const items: ShowOption[] = (d.items ?? []).sort(
+        (a: ShowOption, b: ShowOption) => a.date > b.date ? -1 : 1
+      );
+      setShows(items);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showId) { setData(null); return; }
+    setLoading(true);
+    fetch(`/api/utilization/show/${showId}`)
+      .then(r => r.json())
+      .then(d => setData(d.ok ? d : null))
+      .finally(() => setLoading(false));
+  }, [showId]);
+
+  const f = data?.fleet;
+  const b = data?.batteries;
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)",
+                  borderRadius: 12, padding: "18px 22px", marginBottom: 24 }}>
+      <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Per-Show Utilization Snapshot</h3>
+      <div style={{ marginBottom: 16 }}>
+        <select value={showId} onChange={e => setShowId(e.target.value)}
+          style={{ background: "#1A2A44", border: "1px solid rgba(255,255,255,0.12)",
+                   borderRadius: 8, color: "#F0F4FF", padding: "9px 14px",
+                   fontSize: 14, outline: "none", minWidth: 320 }}>
+          <option value="">-- select a show --</option>
+          {shows.map(s => <option key={s.id} value={s.id}>{s.name} ({s.date})</option>)}
+        </select>
+      </div>
+      {loading && <p style={{ opacity: 0.6, fontSize: 13 }}>Loading...</p>}
+      {data && f && b && (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const }}>
+          {[
+            { label: "Drones Required",  value: f.drones_required,   unit: "",   warn: f.overbooked,   color: f.overbooked ? "#ff6450" : "#4caf82" },
+            { label: "Fleet Active",     value: f.active_drones,     unit: "",   warn: false,           color: "#7eb8f7" },
+            { label: "Surplus / Short",  value: f.overbooked ? f.surplus : `+${f.surplus}`, unit: "", warn: f.overbooked, color: f.overbooked ? "#ff6450" : "#4caf82" },
+            { label: "Load %",           value: f.utilization_pct,   unit: "%",  warn: f.utilization_pct > 90, color: f.utilization_pct > 90 ? "#ff6450" : f.utilization_pct > 70 ? "#f0a500" : "#4caf82" },
+            { label: "Batteries Needed", value: b.batteries_needed,  unit: "",   warn: b.battery_surplus < 0, color: b.battery_surplus < 0 ? "#ff6450" : "#7eb8f7" },
+            { label: "Battery Surplus",  value: b.battery_surplus < 0 ? b.battery_surplus : `+${b.battery_surplus}`, unit: "", warn: b.battery_surplus < 0, color: b.battery_surplus < 0 ? "#ff6450" : "#4caf82" },
+            { label: "Cycles Consumed",  value: b.cycles_consumed,   unit: "",   warn: false,           color: "#f0a500" },
+            ...(b.stress_pct != null ? [{ label: "Avg Battery Stress", value: b.stress_pct, unit: "%", warn: b.stress_pct > 70, color: b.stress_pct > 70 ? "#ff6450" : b.stress_pct > 50 ? "#f0a500" : "#4caf82" }] : []),
+          ].map(k => (
+            <div key={k.label} style={{ background: k.warn ? "rgba(255,100,80,0.10)" : "rgba(255,255,255,0.05)",
+                                        border: "1px solid " + (k.warn ? "rgba(255,100,80,0.40)" : "rgba(255,255,255,0.10)"),
+                                        borderRadius: 12, padding: "14px 18px", minWidth: 130, flex: "1 1 130px" }}>
+              <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4 }}>{k.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: k.color, lineHeight: 1 }}>
+                {k.value}{k.unit && <span style={{ fontSize: 13, fontWeight: 400, opacity: 0.7, marginLeft: 3 }}>{k.unit}</span>}
+              </div>
+            </div>
+          ))}
+          {f.concurrent_demand > 0 && (
+            <div style={{ width: "100%", background: "rgba(240,165,0,0.08)",
+                          border: "1px solid rgba(240,165,0,0.30)", borderRadius: 8,
+                          padding: "8px 14px", fontSize: 12, color: "#f0c040" }}>
+              Warning: {f.concurrent_demand} additional drones demanded by other shows on the same date.
+            </div>
+          )}
+          {f.overbooked && (
+            <div style={{ width: "100%", background: "rgba(255,100,80,0.10)",
+                          border: "1px solid rgba(255,100,80,0.40)", borderRadius: 8,
+                          padding: "8px 14px", fontSize: 12, color: "#ff6450", fontWeight: 700 }}>
+              OVERBOOKED — fleet cannot cover this show's drone requirement.
+            </div>
+          )}
+        </div>
+      )}
+      {!showId && (
+        <p style={{ opacity: 0.5, fontSize: 13, margin: 0 }}>Select a show to see its utilization snapshot.</p>
+      )}
+    </div>
+  );
+}
 export default function Utilization() {
   const [summary, setSummary] = useState<UtilSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthData | null>(null);
@@ -57,6 +153,7 @@ export default function Utilization() {
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
+      <PerShowSnapshot />
       <h2 style={{ margin: "0 0 4px", fontWeight: 900, fontSize: 22 }}>Utilization &amp; Capacity Planning</h2>
       <p style={{ margin: "0 0 24px", opacity: 0.55, fontSize: 13 }}>Module 7 - Fleet load, battery stress, monthly demand heatmap</p>
 

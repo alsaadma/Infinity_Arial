@@ -33,9 +33,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // On mount or token change: validate session + load permissions
+  // On mount only: validate session + load permissions from stored token
   useEffect(() => {
     if (!token) { setLoading(false); return; }
+    // If user is already set (from login()), skip re-validation entirely
+    if (user) { return; }
     let cancelled = false;
     (async () => {
       try {
@@ -70,9 +72,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await apiLogin(email, password);
       if (res.ok && res.token) {
         try { localStorage.setItem(TOKEN_KEY, res.token); } catch {}
+        // Eagerly load permissions before setting state to avoid loading gap
+        let perms: PermissionEntry[] = [];
+        try { perms = await apiPermissions(res.token); } catch {}
         setToken(res.token);
         setUser({ userId: "", email: res.email ?? email, role: res.role ?? "", name: res.name ?? "" });
-        // Permissions will load via the useEffect above
+        setPermissions(perms);
+        setLoading(false);
         return true;
       } else {
         setError(res.error ?? "Login failed");
